@@ -19,15 +19,6 @@
         .back-link:hover {
             text-decoration: underline;
         }
-        .info-box {
-            background: #f5f5fa;
-            border-left: 4px solid #ec9b59;
-            padding: 12px 16px;
-            margin: 16px 0;
-            border-radius: 6px;
-            color: #1d1d1f;
-            font-size: 14px;
-        }
     </style>
 </head>
 <body>
@@ -38,12 +29,8 @@
         <header class="tool-header">
             <img src="https://i.ibb.co/RTgVzm5q/Suite-PDF-removebg-preview.png" alt="Suite PDF">
             <h1>Unir PDFs</h1>
-            <p>Selecciona varios PDFs, ordénalos arrastrando y se fusionarán manteniendo la calidad original.</p>
+            <p>Selecciona varios PDFs y ordénalos arrastrando. Se fusionarán manteniendo la calidad original.</p>
         </header>
-
-        <div class="info-box">
-            ⚡ La fusión se realiza con calidad óptima. Para archivos como recibos bancarios, se preserva la nitidez del texto.
-        </div>
 
         <!-- Área de subida -->
         <div class="upload-area" id="dropZoneMerge">
@@ -71,14 +58,13 @@
     <script src="/js/common.js"></script>
     <script>
         // ============================================================
-        // MERGE (UNIR) - SIEMPRE ALTA CALIDAD
+        // MERGE (UNIR) - VERSIÓN ORIGINAL (COPIA DE PÁGINAS)
         // ============================================================
         let mergeFiles = [];
         const fileListMerge = document.getElementById('fileListMerge');
         const fileCountMerge = document.getElementById('fileCountMerge');
         const mergeBtn = document.getElementById('mergeBtn');
 
-        // Sortable
         new Sortable(fileListMerge, {
             animation: 150,
             ghostClass: 'sortable-ghost',
@@ -153,33 +139,25 @@
 
             mergeBtn.disabled = true;
             showLoading(true);
-            showStatus('mergeStatus', '⏳ Procesando páginas con alta resolución...');
+            showStatus('mergeStatus', '⏳ Uniendo PDFs...');
 
             try {
-                let allImages = [];
-                let totalPages = 0;
+                const formData = new FormData();
+                mergeFiles.forEach(f => formData.append('pdfs', f));
 
-                for (const file of mergeFiles) {
-                    showStatus('mergeStatus', `⏳ Procesando ${file.name}...`);
-                    // Parámetros fijos: alta calidad para preservar texto
-                    const images = await rasterizePdfToImages(file, {
-                        maxWidth: 3000,
-                        quality: 0.95,
-                        minDimension: 2000
-                    });
-                    allImages = allImages.concat(images);
-                    totalPages += images.length;
+                const resp = await fetch('/merge', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                if (!resp.ok) {
+                    const errorText = await resp.text();
+                    throw new Error(errorText || 'Error al fusionar');
                 }
 
-                if (allImages.length === 0) {
-                    throw new Error('No se generaron imágenes de los PDFs');
-                }
-
-                showStatus('mergeStatus', `⏳ Generando PDF combinado (${totalPages} páginas)...`);
-
-                await generatePdfFromImages(allImages, 'merged.pdf', 'merge');
-
-                showStatus('mergeStatus', '✅ PDF combinado correctamente (alta calidad)');
+                const blob = await resp.blob();
+                downloadFile(blob, 'merged.pdf');
+                showStatus('mergeStatus', '✅ PDFs unidos correctamente');
             } catch (err) {
                 showStatus('mergeStatus', '❌ ' + err.message, true);
                 console.error(err);
