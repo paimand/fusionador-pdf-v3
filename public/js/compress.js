@@ -40,7 +40,7 @@ function showStatus(elementId, message, isError = false) {
 }
 
 // ============================================================
-// COMPRESS LOGIC
+// LÓGICA DE COMPRESIÓN
 // ============================================================
 let compressFile = null;
 const dropZoneCompress = document.getElementById('dropZoneCompress');
@@ -49,7 +49,7 @@ const compressBtn = document.getElementById('compressBtn');
 
 if (dropZoneCompress && fileInputCompress && compressBtn) {
 
-    // Prevenir eventos predeterminados de arrastre
+    // Prevenir comportamientos por defecto del navegador en drag & drop
     ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
         dropZoneCompress.addEventListener(eventName, e => {
             e.preventDefault();
@@ -69,6 +69,7 @@ if (dropZoneCompress && fileInputCompress && compressBtn) {
         }, false);
     });
 
+    // Manejar arrastre e inserción de archivos
     dropZoneCompress.addEventListener('drop', e => {
         const dt = e.dataTransfer;
         const files = dt.files;
@@ -89,6 +90,7 @@ if (dropZoneCompress && fileInputCompress && compressBtn) {
         }
     });
 
+    // Clic convencional para selección
     dropZoneCompress.addEventListener('click', () => fileInputCompress.click());
 
     fileInputCompress.addEventListener('change', e => {
@@ -99,6 +101,7 @@ if (dropZoneCompress && fileInputCompress && compressBtn) {
         }
     });
 
+    // Proceso de compresión en el cliente
     compressBtn.addEventListener('click', async () => {
         if (!compressFile) { 
             alert('Selecciona un PDF para comprimir'); 
@@ -110,7 +113,6 @@ if (dropZoneCompress && fileInputCompress && compressBtn) {
         showStatus('compressStatus', '⏳ Inicializando motor PDF...');
 
         try {
-            // Asegurar que PDF.js esté cargado antes de procesar
             await ensurePdfJsLoaded();
 
             const selectedRadio = document.querySelector('input[name="compressLevel"]:checked');
