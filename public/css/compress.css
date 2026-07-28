@@ -1,0 +1,30 @@
+/* Enlace de regreso al inicio */
+.back-link {
+    display: inline-block;
+    margin-bottom: 12px;
+    color: #4b5563;
+    text-decoration: none;
+    font-size: 0.9rem;
+    font-weight: 500;
+}
+
+.back-link:hover {
+    color: #111827;
+    text-decoration: underline;
+}
+
+.select-control {
+    width: 100%;
+    padding: 10px;
+    border: 2px solid #e5e7eb;
+    border-radius: 8px;
+    font-size: 0.95rem;
+    font-family: inherit;
+    outline: none;
+    background-color: #fff;
+    transition: border-color 0.2s;
+}
+
+.select-control:focus {
+    border-color: #2563eb;
+}
