@@ -4,45 +4,72 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Comprimir PDF - Suite PDF</title>
+    
+    <!-- Carga de la librería PDF.js para renderizado en cliente -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+    
     <link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,400;14..32,500;14..32,600;14..32,700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="css/common.css">
-    <link rel="stylesheet" href="css/compress.css">
+    <link rel="stylesheet" href="style.css">
 </head>
 <body>
-    <div class="container">
-        <a href="index.html" class="back-link">← Volver al inicio</a>
 
+    <div class="container">
+        <!-- Header con Logo -->
         <header class="tool-header">
-            <a href="index.html" style="text-decoration:none; color:inherit;">
+            <a href="index.html">
                 <img src="https://i.ibb.co/RTgVzm5q/Suite-PDF-removebg-preview.png" alt="Suite PDF">
             </a>
-            <p>Reduce el tamaño de tu archivo PDF ajustando la calidad de sus imágenes y estructura.</p>
+            <h2>Comprimir PDF</h2>
+            <p>Reduce el tamaño de tu archivo PDF manteniendo la mejor calidad posible.</p>
         </header>
 
-        <div class="upload-area" id="dropZoneCompress">
-            <p>Arrastra o selecciona un PDF para comprimir</p>
-            <input type="file" id="fileInputCompress" accept=".pdf">
+        <!-- Panel de Compresión -->
+        <div id="compressPanel" class="panel active">
+            
+            <!-- Área de Subida / Drag & Drop -->
+            <div class="upload-area" id="dropZoneCompress">
+                <p>Arrastra o selecciona un PDF para comprimir</p>
+                <input type="file" id="fileInputCompress" accept=".pdf">
+            </div>
+
+            <!-- Opciones del Nivel de Compresión -->
+            <div style="margin: 20px 0; text-align: left;">
+                <label style="display:block; margin-bottom:12px; font-weight:600; font-size: 15px;">
+                    Selecciona el nivel de compresión:
+                </label>
+                <div style="display: flex; flex-direction: column; gap: 10px; background: #fafafc; padding: 16px; border-radius: 12px; border: 1px solid #e5e5ea;">
+                    <label style="cursor:pointer; display: flex; align-items: center; gap: 8px;">
+                        <input type="radio" name="compressLevel" value="extreme">
+                        <span><strong>Compresión Extrema:</strong> Menor calidad, máxima reducción de tamaño.</span>
+                    </label>
+                    <label style="cursor:pointer; display: flex; align-items: center; gap: 8px;">
+                        <input type="radio" name="compressLevel" value="recommended" checked>
+                        <span><strong>Compresión Recomendada:</strong> Buen equilibrio entre calidad y tamaño.</span>
+                    </label>
+                    <label style="cursor:pointer; display: flex; align-items: center; gap: 8px;">
+                        <input type="radio" name="compressLevel" value="low">
+                        <span><strong>Baja Compresión:</strong> Alta calidad de imagen, menor reducción de tamaño.</span>
+                    </label>
+                </div>
+            </div>
+
+            <!-- Botones de Acción -->
+            <div class="actions">
+                <a href="index.html" class="btn btn-secondary">Volver al inicio</a>
+                <button id="compressBtn" class="btn btn-primary">Comprimir PDF</button>
+            </div>
+
+            <!-- Estado del Procesamiento -->
+            <div id="compressStatus" style="margin-top:16px; font-weight:500;"></div>
         </div>
 
-        <div id="compressOptions" style="display:none; margin-bottom:16px;">
-            <label for="compressionLevel" style="font-size:0.9rem; font-weight:600; color:#374151; display:block; margin-bottom:6px;">
-                Nivel de compresión:
-            </label>
-            <select id="compressionLevel" class="select-control">
-                <option value="extreme">1- Compresión Extrema (Menos calidad, alta compresión)</option>
-                <option value="recommended" selected>2- Compresión Recomendada (Buena calidad, buena compresión)</option>
-                <option value="low">3- Baja compresión (Alta calidad, menos compresión)</option>
-            </select>
+        <!-- Indicador de Carga Global -->
+        <div id="loading" style="display:none; margin-top:20px; text-align:center; color:#ec9b59; font-weight:600;">
+            ⏳ Procesando... Por favor espera.
         </div>
-
-        <div class="actions">
-            <button id="compressBtn" class="btn btn-primary">Comprimir PDF</button>
-        </div>
-        <div id="compressStatus" style="margin-top:12px;"></div>
-        <div id="loading" style="display:none;">⏳ Comprimiendo archivo...</div>
     </div>
 
-    <script src="js/common.js"></script>
+    <!-- Script específico del cliente para compresión -->
     <script src="js/compress.js"></script>
 </body>
 </html>
