@@ -1,35 +1,19 @@
-# 1. Imagen base oficial de Node.js (Debian Bookworm LTS)
-FROM node:20-bookworm-slim
+FROM node:20-alpine
 
-# Evita avisos interactivos de debconf durante el build de apt
-ENV DEBIAN_FRONTEND=noninteractive
-
-# 2. Instalar herramientas nativas de manipulación y compresión de PDF
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    ghostscript \
-    qpdf \
-    poppler-utils \
-    && apt-get clean \
-    && rm -rf /var/lib/apt/lists/*
-
-# 3. Establecer el directorio de trabajo dentro del contenedor
 WORKDIR /app
 
-# 4. Copiar los archivos de configuración de dependencias
-# IMPORTANTE: package-lock.json debe estar subido a tu repositorio Git
+# Copiar manifiesto de dependencias
 COPY package*.json ./
 
-# 5. Instalación limpia de dependencias de producción utilizando npm ci
-RUN npm install --omit=dev
+# Instalar todas las dependencias necesarias
+RUN npm install
 
-# 6. Copiar el resto del código fuente
+# Copiar todo el código del proyecto
 COPY . .
 
-# 7. Crear directorios temporales necesarios con permisos adecuados
+# Crear carpetas temporales para el procesamiento de archivos
 RUN mkdir -p tmp/uploads tmp/outputs
 
-# 8. Expone el puerto del servidor (Render asigna procesando el env PORT)
 EXPOSE 3000
 
-# 9. Comando de inicio de la aplicación
 CMD ["npm", "start"]
