@@ -1,46 +1,5 @@
 // ============================================================
-// CARGA DINÁMICA DE PDF.JS Y FUNCIONES AUXILIARES
-// ============================================================
-async function ensurePdfJsLoaded() {
-    if (typeof pdfjsLib === 'undefined') {
-        await new Promise((resolve, reject) => {
-            const script = document.createElement('script');
-            script.src = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
-            script.onload = resolve;
-            script.onerror = () => reject(new Error('No se pudo cargar la librería PDF.js'));
-            document.head.appendChild(script);
-        });
-    }
-    if (pdfjsLib && !pdfjsLib.GlobalWorkerOptions.workerSrc) {
-        pdfjsLib.GlobalWorkerOptions.workerSrc =
-            'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
-    }
-}
-
-function readFileAsArrayBuffer(file) {
-    return new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = (e) => resolve(e.target.result);
-        reader.onerror = (e) => reject(e.target.error);
-        reader.readAsArrayBuffer(file);
-    });
-}
-
-function showLoading(show) {
-    const loadingEl = document.getElementById('loading');
-    if (loadingEl) loadingEl.style.display = show ? 'block' : 'none';
-}
-
-function showStatus(elementId, message, isError = false) {
-    const el = document.getElementById(elementId);
-    if (el) {
-        el.textContent = message;
-        el.style.color = isError ? '#d32f2f' : '#1d1d1f';
-    }
-}
-
-// ============================================================
-// LÓGICA DE COMPRESIÓN
+// COMPRESS LOGIC (LÍMITES Y CALIDAD AJUSTADOS)
 // ============================================================
 let compressFile = null;
 const dropZoneCompress = document.getElementById('dropZoneCompress');
@@ -113,8 +72,6 @@ if (dropZoneCompress && fileInputCompress && compressBtn) {
         showStatus('compressStatus', '⏳ Inicializando motor PDF...');
 
         try {
-            await ensurePdfJsLoaded();
-
             const selectedRadio = document.querySelector('input[name="compressLevel"]:checked');
             const level = selectedRadio ? selectedRadio.value : 'recommended';
 
@@ -124,12 +81,27 @@ if (dropZoneCompress && fileInputCompress && compressBtn) {
             const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
             const totalPages = pdf.numPages;
 
+            // Ajuste de parámetros para conseguir los % deseados sobre el peso original:
+            // Extreme: ~12-13%
+            // Recommended: ~44-45%
+            // Low: ~94-95%
             let maxDimension, quality;
             switch (level) {
-                case 'extreme': maxDimension = 800; quality = 0.5; break;
-                case 'recommended': maxDimension = 1200; quality = 0.7; break;
-                case 'low': maxDimension = 1800; quality = 0.85; break;
-                default: maxDimension = 1200; quality = 0.7;
+                case 'extreme': 
+                    maxDimension = 950; 
+                    quality = 0.62; 
+                    break;
+                case 'recommended': 
+                    maxDimension = 1600; 
+                    quality = 0.82; 
+                    break;
+                case 'low': 
+                    maxDimension = 2400; 
+                    quality = 0.92; 
+                    break;
+                default: 
+                    maxDimension = 1600; 
+                    quality = 0.82;
             }
 
             const images = [];
@@ -171,14 +143,7 @@ if (dropZoneCompress && fileInputCompress && compressBtn) {
             if (!resp.ok) throw new Error(await resp.text());
 
             const blob = await resp.blob();
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = `compressed_${level}.pdf`;
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-            URL.revokeObjectURL(url);
+            downloadFile(blob, `compressed_${level}.pdf`);
 
             showStatus('compressStatus', '✅ PDF comprimido correctamente');
         } catch (err) {
