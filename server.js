@@ -13,8 +13,8 @@ const upload = multer({ storage: multer.memoryStorage() });
 
 app.use(express.static('public'));
 
-// ========== FUNCIONES AUXILIARES ==========
-
+// ========== FUNCIÓN AUXILIAR ==========
+// Convierte rangos tipo "1-3,5" a un array de índices (base 0)
 function parsePageRanges(rangesStr, totalPages) {
     if (!rangesStr || rangesStr.trim() === '') return [];
     const parts = rangesStr.split(',').map(s => s.trim());
@@ -34,6 +34,7 @@ function parsePageRanges(rangesStr, totalPages) {
     return Array.from(pageIndices).sort((a, b) => a - b);
 }
 
+// Crea un nuevo PDF a partir de un PDF original y un array de índices de páginas
 async function createPdfFromIndices(sourcePdf, indices) {
     const newPdf = await PDFDocument.create();
     const pages = await newPdf.copyPages(sourcePdf, indices);
@@ -41,7 +42,7 @@ async function createPdfFromIndices(sourcePdf, indices) {
     return await newPdf.save();
 }
 
-// ========== RUTA: UNIR (CON SOPORTE PARA ENCRIPTADOS) ==========
+// ========== RUTA: UNIR (con soporte mejorado para PDFs complejos) ==========
 app.post('/merge', upload.array('pdfs'), async (req, res) => {
     try {
         const files = req.files;
@@ -54,7 +55,8 @@ app.post('/merge', upload.array('pdfs'), async (req, res) => {
 
         for (const file of files) {
             try {
-                const pdf = await PDFDocument.load(file.buffer, { 
+                // Cargar el PDF con opciones que ignoran encriptación y errores de fuentes
+                const pdf = await PDFDocument.load(file.buffer, {
                     ignoreEncryption: true,
                     updateMetadata: false
                 });
