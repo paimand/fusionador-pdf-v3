@@ -1,5 +1,5 @@
 // ============================================================
-// COMPRESS LOGIC - REAJUSTE DE LÍMITES (~12%, ~45%, ~95%)
+// COMPRESS LOGIC (ENVÍO MULTIPART A BACKEND CON GHOSTSCRIPT)
 // ============================================================
 let compressFile = null;
 const dropZoneCompress = document.getElementById('dropZoneCompress');
@@ -60,7 +60,7 @@ if (dropZoneCompress && fileInputCompress && compressBtn) {
         }
     });
 
-    // Proceso de compresión en el cliente
+    // Enviar archivo al servidor para compresión
     compressBtn.addEventListener('click', async () => {
         if (!compressFile) { 
             alert('Selecciona un PDF para comprimir'); 
@@ -68,95 +68,49 @@ if (dropZoneCompress && fileInputCompress && compressBtn) {
         }
 
         compressBtn.disabled = true;
-        showLoading(true);
-        showStatus('compressStatus', '⏳ Inicializando motor PDF...');
+        if (typeof showLoading === 'function') showLoading(true);
+        if (typeof showStatus === 'function') showStatus('compressStatus', '⏳ Comprimiendo PDF en el servidor...');
 
         try {
             const selectedRadio = document.querySelector('input[name="compressLevel"]:checked');
             const level = selectedRadio ? selectedRadio.value : 'recommended';
 
-            showStatus('compressStatus', '⏳ Procesando optimización...');
-
-            const arrayBuffer = await readFileAsArrayBuffer(compressFile);
-            const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
-            const totalPages = pdf.numPages;
-
-            // Parámetros reajustados:
-            // Extreme: 820px / quality 0.46 -> Subir del 7% al ~12%
-            // Recommended: 2100px / quality 0.87 -> Subir del 38% al ~45%
-            // Low: Escala nativa (1.33x) / quality 0.88 -> Reducir al ~95% sin sobrepasar el peso original
-            let maxDimension, quality, targetScale;
-            switch (level) {
-                case 'extreme': 
-                    maxDimension = 820; 
-                    quality = 0.46; 
-                    targetScale = null;
-                    break;
-                case 'recommended': 
-                    maxDimension = 2100; 
-                    quality = 0.87; 
-                    targetScale = null;
-                    break;
-                case 'low': 
-                    maxDimension = 2600; 
-                    quality = 0.88; 
-                    targetScale = 1.33; // Escala moderada sin engordar el documento
-                    break;
-                default: 
-                    maxDimension = 2100; 
-                    quality = 0.87;
-                    targetScale = null;
-            }
-
-            const images = [];
-
-            for (let i = 1; i <= totalPages; i++) {
-                showStatus('compressStatus', `⏳ Procesando página ${i} de ${totalPages}...`);
-                const page = await pdf.getPage(i);
-                
-                const unscaledViewport = page.getViewport({ scale: 1.0 });
-                const currentMax = Math.max(unscaledViewport.width, unscaledViewport.height);
-                
-                let scale = targetScale || 1.5;
-
-                if (!targetScale && currentMax > maxDimension) {
-                    scale = maxDimension / currentMax;
-                }
-
-                const viewport = page.getViewport({ scale });
-                const canvas = document.createElement('canvas');
-                canvas.width = Math.floor(viewport.width);
-                canvas.height = Math.floor(viewport.height);
-                const ctx = canvas.getContext('2d');
-
-                ctx.fillStyle = '#ffffff';
-                ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-                await page.render({ canvasContext: ctx, viewport }).promise;
-
-                const dataUrl = canvas.toDataURL('image/jpeg', quality);
-                images.push(dataUrl);
-            }
-
-            showStatus('compressStatus', '⏳ Generando documento comprimido...');
+            const formData = new FormData();
+            formData.append('pdf', compressFile);
+            formData.append('level', level);
 
             const resp = await fetch('/compress', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ images, level })
+                body: formData
             });
 
-            if (!resp.ok) throw new Error(await resp.text());
+            if (!resp.ok) {
+                const errText = await resp.text();
+                throw new Error(errText || 'Error al comprimir el archivo.');
+            }
 
             const blob = await resp.blob();
-            downloadFile(blob, `compressed_${level}.pdf`);
+            
+            // Descargar el archivo procesado
+            if (typeof downloadFile === 'function') {
+                downloadFile(blob, `comprimido_${compressFile.name}`);
+            } else {
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `comprimido_${compressFile.name}`;
+                document.body.appendChild(a);
+                a.click();
+                a.remove();
+                window.URL.revokeObjectURL(url);
+            }
 
-            showStatus('compressStatus', '✅ PDF comprimido correctamente');
+            if (typeof showStatus === 'function') showStatus('compressStatus', '✅ PDF comprimido correctamente');
         } catch (err) {
-            showStatus('compressStatus', '❌ ' + err.message, true);
+            if (typeof showStatus === 'function') showStatus('compressStatus', '❌ ' + err.message, true);
         } finally {
             compressBtn.disabled = false;
-            showLoading(false);
+            if (typeof showLoading === 'function') showLoading(false);
         }
     });
 }
