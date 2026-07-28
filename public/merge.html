@@ -20,9 +20,13 @@
             text-decoration: underline;
         }
         .omitted-text {
-            color: #f59e0b;
+            color: #d32f2f;
             font-weight: 500;
             margin-top: 8px;
+            padding: 12px;
+            background-color: #fef2f2;
+            border-radius: 8px;
+            border-left: 4px solid #d32f2f;
         }
     </style>
 </head>
@@ -56,7 +60,7 @@
             <button id="mergeBtn" class="btn btn-primary">Unir PDFs</button>
         </div>
         <div id="mergeStatus" style="margin-top:12px;"></div>
-        <div id="mergeOmitted" style="margin-top:8px;"></div>
+        <div id="mergeOmitted" style="margin-top:12px;"></div>
 
         <div id="loading">⏳ Procesando... Por favor espera.</div>
     </div>
@@ -168,7 +172,7 @@
                 // Leer cabecera de archivos omitidos
                 const omitted = resp.headers.get('X-Omitted');
                 if (omitted) {
-                    mergeOmitted.innerHTML = `<span class="omitted-text">⚠️ ${omitted}</span>`;
+                    mergeOmitted.innerHTML = `<div class="omitted-text">⚠️ ${omitted}</div>`;
                 }
 
                 const blob = await resp.blob();
