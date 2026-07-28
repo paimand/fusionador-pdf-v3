@@ -96,13 +96,14 @@ async function renderThumbnail(file, canvas, pageNum = 1) {
 }
 
 // ============================================================
-// RASTERIZAR PDF A IMÁGENES (con parámetros ajustables)
+// RASTERIZAR PDF A IMÁGENES (ALTA CALIDAD)
 // ============================================================
 async function rasterizePdfToImages(file, options = {}) {
+    // Parámetros por defecto: alta calidad para preservar texto
     const {
-        maxWidth = 1500,         // <-- Reducido de 3000 a 1500
-        quality = 0.82,          // <-- Reducido de 0.95 a 0.82
-        minDimension = 1200,     // <-- Reducido de 2000 a 1200
+        maxWidth = 3000,
+        quality = 0.95,
+        minDimension = 2000,
         usePNG = false
     } = options;
 
