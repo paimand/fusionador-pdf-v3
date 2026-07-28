@@ -4,23 +4,14 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Dividir PDF - Suite PDF</title>
-    <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
+    
+    <!-- Librería externa -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+    
+    <!-- Fuentes y estilos -->
     <link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,400;14..32,500;14..32,600;14..32,700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="css/common.css">
+    <link rel="stylesheet" href="/css/common.css">
     <style>
-        .back-link {
-            display: inline-block;
-            margin-bottom: 12px;
-            color: #4b5563;
-            text-decoration: none;
-            font-size: 0.9rem;
-            font-weight: 500;
-        }
-        .back-link:hover {
-            color: #111827;
-            text-decoration: underline;
-        }
         .page-card {
             border: 2px solid #e5e7eb;
             border-radius: 8px;
@@ -51,15 +42,11 @@
 </head>
 <body>
 
-<div id="app-header"></div>
+    <div id="app-header"></div>
     
     <div class="container">
-        <a href="index.html" class="back-link">← Volver al inicio</a>
-
         <header class="tool-header">
-            <a href="index.html" style="text-decoration:none; color:inherit;">
-                <img src="https://i.ibb.co/RTgVzm5q/Suite-PDF-removebg-preview.png" alt="Suite PDF">
-            </a>
+            <h1>Dividir PDF</h1>
             <p>Divide un PDF en partes seleccionando páginas o rangos.</p>
         </header>
 
@@ -97,7 +84,9 @@
         <div id="loading" style="display:none;">⏳ Procesando...</div>
     </div>
 
-    <script src="js/common.js"></script>
+    <div id="app-footer"></div>
+
+    <script src="/js/common.js"></script>
     <script>
         pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
 
@@ -211,7 +200,6 @@
                     throw new Error(errText);
                 }
 
-                // Detectar la extensión correcta basándonos en la respuesta del servidor
                 const contentType = resp.headers.get('content-type') || '';
                 const isZip = contentType.includes('application/zip');
                 const defaultFilename = isZip ? 'paginas_divididas.zip' : 'documento_dividido.pdf';
@@ -240,7 +228,5 @@
         });
     </script>
 
-<div id="app-footer"></div>
-    
 </body>
 </html>
