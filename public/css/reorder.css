@@ -1,0 +1,59 @@
+/* Enlace de regreso al inicio */
+.back-link {
+    display: inline-block;
+    margin-bottom: 12px;
+    color: #4b5563;
+    text-decoration: none;
+    font-size: 0.9rem;
+    font-weight: 500;
+}
+
+.back-link:hover {
+    color: #111827;
+    text-decoration: underline;
+}
+
+/* Tarjeta reordenable */
+.page-card-reorder {
+    border: 2px solid #e5e7eb;
+    border-radius: 8px;
+    padding: 8px;
+    background: #fff;
+    cursor: grab;
+    text-align: center;
+    transition: box-shadow 0.2s ease, border-color 0.2s ease;
+    position: relative;
+    user-select: none;
+}
+
+.page-card-reorder:active {
+    cursor: grabbing;
+}
+
+.page-card-reorder:hover {
+    border-color: #2563eb;
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+}
+
+/* Estado de la tarjeta mientras se arrastra */
+.sortable-ghost {
+    opacity: 0.4;
+    border-color: #93c5fd;
+    background-color: #eff6ff;
+}
+
+.page-card-reorder canvas {
+    max-width: 100%;
+    height: auto;
+    border-radius: 4px;
+    display: block;
+    margin: 0 auto 6px auto;
+    pointer-events: none;
+}
+
+.page-card-reorder span {
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: #374151;
+    pointer-events: none;
+}
