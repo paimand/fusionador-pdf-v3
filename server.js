@@ -20,7 +20,7 @@ const storage = multer.diskStorage({
     },
     filename: (req, file, cb) => {
         const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-        cb(null, uniqueSuffix + '-' + file.originalname);
+        cb(null, uniqueSuffix + '-' + file.originalname.replace(/\s+/g, '_'));
     }
 });
 
@@ -52,7 +52,7 @@ app.get('/compress.html', (req, res) => {
 });
 
 // ============================================================
-// RUTA DE COMPRESIÓN CON GHOSTSCRIPT (BLINDADA)
+// RUTA DE COMPRESIÓN CON GHOSTSCRIPT (RUTA ABSOLUTA RENDER)
 // ============================================================
 app.post('/compress', (req, res) => {
     upload.single('pdf')(req, res, (err) => {
@@ -66,43 +66,45 @@ app.post('/compress', (req, res) => {
         }
 
         const inputPath = req.file.path;
-        const outputPath = path.join(uploadDir, `compressed_${Date.now()}_${req.file.originalname}`);
+        const safeOriginalName = req.file.originalname.replace(/\s+/g, '_');
+        const outputPath = path.join(uploadDir, `compressed_${Date.now()}_${safeOriginalName}`);
         const level = req.body.level || 'recommended';
 
-        // Mapeo de perfiles nativos Ghostscript:
-        // /screen  -> Extreme (~12% - 72 DPI)
-        // /ebook   -> Recommended (~45% - 150 DPI)
-        // /printer -> Low (~95% - 300 DPI, optimización interna)
+        // Mapeo de perfiles nativos Ghostscript
         let gsSetting = '/ebook';
         if (level === 'extreme') gsSetting = '/screen';
         if (level === 'low') gsSetting = '/printer';
 
-        // Comando nativo Ghostscript
-        const command = `gs -sDEVICE=pdfwrite -dCompatibilityLevel=1.4 -dPDFSETTINGS=${gsSetting} -dNOPAUSE -dQUIET -dBATCH -sOutputFile="${outputPath}" "${inputPath}"`;
+        // Usamos la ruta binaria explícita /usr/bin/gs en Linux
+        const gsBinary = process.platform === 'win32' ? 'gswin64c' : '/usr/bin/gs';
+        
+        // Comando Ghostscript optimizado
+        const command = `${gsBinary} -sDEVICE=pdfwrite -dCompatibilityLevel=1.4 -dPDFSETTINGS=${gsSetting} -dNOPAUSE -dQUIET -dBATCH -sOutputFile="${outputPath}" "${inputPath}"`;
 
-        // Timeout de seguridad de 60 segundos por si el archivo es grande
-        exec(command, { timeout: 60000 }, (error, stdout, stderr) => {
+        exec(command, { timeout: 90000 }, (error, stdout, stderr) => {
             // Eliminar siempre el archivo original recibido
             if (fs.existsSync(inputPath)) {
                 try { fs.unlinkSync(inputPath); } catch (e) {}
             }
 
             if (error) {
-                console.error('Error ejecutando Ghostscript:', error || stderr);
+                console.error('Error ejecutando Ghostscript:', error);
+                console.error('Stderr:', stderr);
                 if (fs.existsSync(outputPath)) {
                     try { fs.unlinkSync(outputPath); } catch (e) {}
                 }
-                return res.status(500).send('Error interno al comprimir el PDF.');
+                // Retornamos el detalle real del error para depuración
+                return res.status(500).send(`Error de compresión (${error.code || 'GS_FAIL'}): ${stderr || error.message}`);
             }
 
             if (!fs.existsSync(outputPath)) {
-                return res.status(500).send('No se generó el archivo procesado.');
+                return res.status(500).send('No se pudo generar el archivo procesado en el servidor.');
             }
 
             // Descargar el archivo comprimido generado
-            res.download(outputPath, `comprimido_${req.file.originalname}`, (downloadErr) => {
+            res.download(outputPath, `comprimido_${safeOriginalName}`, (downloadErr) => {
                 if (downloadErr) {
-                    console.error('Error al enviar descarga:', downloadErr);
+                    console.error('Error al enviar la descarga:', downloadErr);
                 }
                 // Eliminar el archivo de salida procesado
                 if (fs.existsSync(outputPath)) {
@@ -114,8 +116,7 @@ app.post('/compress', (req, res) => {
 });
 
 // ============================================================
-// OTRAS RUTAS DE TU APLICACIÓN (MERGE, SPLIT, ETC.)
-// (Mantiene tus endpoints de pdf-lib sin modificaciones)
+// RESTO DE RUTAS DE TU APLICACIÓN (MERGE, SPLIT, ETC.)
 // ============================================================
 
 app.listen(PORT, () => {
