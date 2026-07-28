@@ -153,6 +153,36 @@ async function renderPageGrid(file, gridId, selectionsArray) {
         const previewEl = document.getElementById(previewId);
         if (previewEl) previewEl.style.display = 'block';
 
+        // ============================================================
+// RASTERIZAR PDF A IMÁGENES (para compresión y unión)
+// ============================================================
+async function rasterizePdfToImages(file, maxDimension = 1200, quality = 0.8) {
+    const arrayBuffer = await readFileAsArrayBuffer(file);
+    const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+    const totalPages = pdf.numPages;
+    const images = [];
+
+    for (let i = 1; i <= totalPages; i++) {
+        const page = await pdf.getPage(i);
+        const viewport = page.getViewport({ scale: 1.0 });
+        const currentMax = Math.max(viewport.width, viewport.height);
+        let scale = 1.0;
+        if (currentMax > maxDimension) {
+            scale = maxDimension / currentMax;
+        }
+        const scaledViewport = page.getViewport({ scale });
+        const canvas = document.createElement('canvas');
+        canvas.width = Math.floor(scaledViewport.width);
+        canvas.height = Math.floor(scaledViewport.height);
+        const ctx = canvas.getContext('2d');
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        await page.render({ canvasContext: ctx, viewport: scaledViewport }).promise;
+        images.push(canvas.toDataURL('image/jpeg', quality));
+    }
+    return images;
+}
+
     } catch (err) {
         alert('Error al cargar las páginas: ' + err.message);
     }
