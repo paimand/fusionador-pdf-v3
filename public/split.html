@@ -9,7 +9,6 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,400;14..32,500;14..32,600;14..32,700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="css/common.css">
     <style>
-        /* Estilos complementarios respetando la estética de common.css */
         .back-link {
             display: inline-block;
             margin-bottom: 12px;
@@ -97,7 +96,6 @@
 
     <script src="js/common.js"></script>
     <script>
-        // Configuración de worker para PDF.js
         pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
 
         let splitFile = null;
@@ -108,7 +106,6 @@
         const splitPreview = document.getElementById('splitPreview');
         const gridContainer = document.getElementById('splitPageGrid');
 
-        // Control de los modos de división
         document.querySelectorAll('input[name="splitMode"]').forEach(radio => {
             radio.addEventListener('change', () => {
                 const isRanges = radio.value === 'ranges';
@@ -117,7 +114,6 @@
             });
         });
 
-        // Evento de selección de archivo
         setupDropZone('dropZoneSplit', 'fileInputSplit', files => {
             if (files && files[0]) {
                 splitFile = files[0];
@@ -126,7 +122,6 @@
             }
         });
 
-        // Función para procesar el PDF y generar las miniaturas
         async function loadAndRenderPdf(file) {
             gridContainer.innerHTML = '<p style="font-size:0.9rem; color:#6b7280;">Cargando miniaturas...</p>';
             splitPreview.style.display = 'block';
@@ -136,7 +131,7 @@
                 const pdfDoc = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
                 const numPages = pdfDoc.numPages;
 
-                splitSelections = new Array(numPages).fill(true); // Seleccionadas por defecto
+                splitSelections = new Array(numPages).fill(true);
                 gridContainer.innerHTML = '';
 
                 for (let i = 1; i <= numPages; i++) {
@@ -160,7 +155,6 @@
                     card.appendChild(canvas);
                     card.appendChild(label);
 
-                    // Alternar selección al hacer clic en la miniatura
                     card.addEventListener('click', () => {
                         const idx = parseInt(card.dataset.pageIndex);
                         splitSelections[idx] = !splitSelections[idx];
@@ -175,7 +169,6 @@
             }
         }
 
-        // Botones de selección masiva
         document.getElementById('splitSelectAll').addEventListener('click', () => {
             splitSelections.fill(true);
             document.querySelectorAll('.page-card').forEach(card => card.classList.add('selected'));
@@ -186,7 +179,6 @@
             document.querySelectorAll('.page-card').forEach(card => card.classList.remove('selected'));
         });
 
-        // Envío de la petición
         splitBtn.addEventListener('click', async () => {
             if (!splitFile) { alert('Primero selecciona un PDF'); return; }
             const mode = document.querySelector('input[name="splitMode"]:checked').value;
@@ -211,18 +203,25 @@
                 formData.append('ranges', pagesToSend);
                 
                 const resp = await fetch('/split', { method: 'POST', body: formData });
-                if (!resp.ok) throw new Error(await resp.text());
-                
-                if (typeof downloadFile === 'function') {
-                    downloadFile(await resp.blob(), 'split.pdf');
-                } else {
-                    const blob = await resp.blob();
-                    const url = window.URL.createObjectURL(blob);
-                    const a = document.createElement('a');
-                    a.href = url;
-                    a.download = 'pdf_dividido.pdf';
-                    a.click();
+                if (!resp.ok) {
+                    const errText = await resp.text();
+                    throw new Error(errText);
                 }
+
+                // Detectar la extensión correcta basándonos en la respuesta del servidor
+                const contentType = resp.headers.get('content-type') || '';
+                const isZip = contentType.includes('application/zip');
+                const defaultFilename = isZip ? 'paginas_divididas.zip' : 'documento_dividido.pdf';
+
+                const blob = await resp.blob();
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = defaultFilename;
+                document.body.appendChild(a);
+                a.click();
+                a.remove();
+                window.URL.revokeObjectURL(url);
                 
                 if (typeof showStatus === 'function') showStatus('splitStatus', '✅ División completada');
             } catch (err) {
