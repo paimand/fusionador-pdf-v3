@@ -1,8 +1,7 @@
 const express = require('express');
 const path = require('path');
 const fs = require('fs');
-const multer = require('multer');
-const { exec } = require('child_process');
+const { PDFDocument } = require('pdf-lib');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -13,28 +12,12 @@ if (!fs.existsSync(uploadDir)) {
     fs.mkdirSync(uploadDir, { recursive: true });
 }
 
-// Configuración de Multer para recepción de archivos
-const storage = multer.diskStorage({
-    destination: (req, file, cb) => {
-        cb(null, uploadDir);
-    },
-    filename: (req, file, cb) => {
-        const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-        cb(null, uniqueSuffix + '-' + file.originalname.replace(/\s+/g, '_'));
-    }
-});
-
-const upload = multer({ 
-    storage: storage,
-    limits: { fileSize: 100 * 1024 * 1024 } // Límite de 100 MB
-});
-
-// Middlewares estándar
+// Middlewares estándar con límite ampliado para JSON
 app.use(express.json({ limit: '100mb' }));
 app.use(express.urlencoded({ extended: true, limit: '100mb' }));
 app.use(express.static(path.join(__dirname, 'public')));
 
-// Servir las vistas de la aplicación
+// Servir las vistas HTML
 app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
@@ -52,67 +35,49 @@ app.get('/compress.html', (req, res) => {
 });
 
 // ============================================================
-// RUTA DE COMPRESIÓN CON GHOSTSCRIPT (RUTA ABSOLUTA RENDER)
+// RUTA DE COMPRESIÓN ULTRARRÁPIDA (RECONSTRUCCIÓN DE PÁGINAS)
 // ============================================================
-app.post('/compress', (req, res) => {
-    upload.single('pdf')(req, res, (err) => {
-        if (err) {
-            console.error('Error al subir el archivo:', err);
-            return res.status(400).send('Error en la transferencia del archivo.');
+app.post('/compress', async (req, res) => {
+    try {
+        const { images, level } = req.body;
+
+        if (!images || !Array.isArray(images) || images.length === 0) {
+            return res.status(400).send('No se han recibido páginas para procesar.');
         }
 
-        if (!req.file) {
-            return res.status(400).send('No se ha recibido ningún archivo PDF.');
-        }
+        // Crear un nuevo documento PDF limpio
+        const pdfDoc = await PDFDocument.create();
 
-        const inputPath = req.file.path;
-        const safeOriginalName = req.file.originalname.replace(/\s+/g, '_');
-        const outputPath = path.join(uploadDir, `compressed_${Date.now()}_${safeOriginalName}`);
-        const level = req.body.level || 'recommended';
+        for (const dataUrl of images) {
+            // Extraer el base64 de la imagen JPEG
+            const base64Data = dataUrl.replace(/^data:image\/jpeg;base64,/, '');
+            const imageBuffer = Buffer.from(base64Data, 'base64');
 
-        // Mapeo de perfiles nativos Ghostscript
-        let gsSetting = '/ebook';
-        if (level === 'extreme') gsSetting = '/screen';
-        if (level === 'low') gsSetting = '/printer';
+            // Incrustar la imagen optimizada
+            const embeddedImage = await pdfDoc.embedJpg(imageBuffer);
+            const { width, height } = embeddedImage;
 
-        // Usamos la ruta binaria explícita /usr/bin/gs en Linux
-        const gsBinary = process.platform === 'win32' ? 'gswin64c' : '/usr/bin/gs';
-        
-        // Comando Ghostscript optimizado
-        const command = `${gsBinary} -sDEVICE=pdfwrite -dCompatibilityLevel=1.4 -dPDFSETTINGS=${gsSetting} -dNOPAUSE -dQUIET -dBATCH -sOutputFile="${outputPath}" "${inputPath}"`;
-
-        exec(command, { timeout: 90000 }, (error, stdout, stderr) => {
-            // Eliminar siempre el archivo original recibido
-            if (fs.existsSync(inputPath)) {
-                try { fs.unlinkSync(inputPath); } catch (e) {}
-            }
-
-            if (error) {
-                console.error('Error ejecutando Ghostscript:', error);
-                console.error('Stderr:', stderr);
-                if (fs.existsSync(outputPath)) {
-                    try { fs.unlinkSync(outputPath); } catch (e) {}
-                }
-                // Retornamos el detalle real del error para depuración
-                return res.status(500).send(`Error de compresión (${error.code || 'GS_FAIL'}): ${stderr || error.message}`);
-            }
-
-            if (!fs.existsSync(outputPath)) {
-                return res.status(500).send('No se pudo generar el archivo procesado en el servidor.');
-            }
-
-            // Descargar el archivo comprimido generado
-            res.download(outputPath, `comprimido_${safeOriginalName}`, (downloadErr) => {
-                if (downloadErr) {
-                    console.error('Error al enviar la descarga:', downloadErr);
-                }
-                // Eliminar el archivo de salida procesado
-                if (fs.existsSync(outputPath)) {
-                    try { fs.unlinkSync(outputPath); } catch (e) {}
-                }
+            // Crear página adaptada al tamaño exacto de la imagen
+            const page = pdfDoc.addPage([width, height]);
+            page.drawImage(embeddedImage, {
+                x: 0,
+                y: 0,
+                width: width,
+                height: height,
             });
-        });
-    });
+        }
+
+        // Guardar el nuevo documento optimizado
+        const pdfBytes = await pdfDoc.save();
+
+        res.setHeader('Content-Type', 'application/pdf');
+        res.setHeader('Content-Disposition', `attachment; filename="compressed_${level || 'result'}.pdf"`);
+        return res.send(Buffer.from(pdfBytes));
+
+    } catch (error) {
+        console.error('Error procesando compresión rápida:', error);
+        return res.status(500).send('Error interno reconstruyendo el PDF comprimido.');
+    }
 });
 
 // ============================================================
