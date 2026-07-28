@@ -1,17 +1,25 @@
-FROM node:18-slim
+# Usa la imagen oficial de Node.js en su versión LTS sobre Debian Bookworm
+FROM node:18-bookworm-slim
 
-# Instalar qpdf en el sistema operativo del contenedor
-RUN apt-get update && apt-get install -y qpdf && rm -rf /var/lib/apt/lists/*
+# Instala las herramientas nativas necesarias: qpdf y ghostscript
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends qpdf ghostscript && \
+    rm -rf /var/lib/apt/lists/*
 
+# Establece el directorio de trabajo
 WORKDIR /app
 
-# Copiar paquetes e instalar dependencias
+# Copia los archivos de definición de dependencias
 COPY package*.json ./
-RUN npm install
 
-# Copiar todo el código de la aplicación
+# Instala únicamente las dependencias de producción
+RUN npm ci --only=production
+
+# Copia el resto del código fuente del proyecto
 COPY . .
 
+# Expone el puerto por defecto de la aplicación
 EXPOSE 3000
 
+# Comando para iniciar el servidor
 CMD ["npm", "start"]
