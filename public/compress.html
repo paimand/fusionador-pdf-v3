@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Comprimir PDF - Suite PDF</title>
+    <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,400;14..32,500;14..32,600;14..32,700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="css/common.css">
+</head>
+<body>
+    <div class="container">
+        <header class="tool-header">
+            <a href="index.html" style="text-decoration:none; color:inherit;">
+                <img src="https://i.ibb.co/RTgVzm5q/Suite-PDF-removebg-preview.png" alt="Suite PDF">
+            </a>
+            <p>Reduce el tamaño de tu PDF manteniendo la calidad que necesitas.</p>
+        </header>
+
+        <div class="upload-area" id="dropZoneCompress">
+            <p>Arrastra o selecciona un PDF para comprimir</p>
+            <input type="file" id="fileInputCompress" accept=".pdf">
+        </div>
+
+        <div style="margin: 16px 0;">
+            <label style="display:block; margin-bottom:6px; font-weight:600;">Nivel de compresión:</label>
+            <label style="margin-right:15px;">
+                <input type="radio" name="compressLevel" value="extreme" checked> Compresión Extrema (menos calidad)
+            </label>
+            <label style="margin-right:15px;">
+                <input type="radio" name="compressLevel" value="recommended"> Compresión Recomendada
+            </label>
+            <label>
+                <input type="radio" name="compressLevel" value="low"> Baja Compresión (alta calidad)
+            </label>
+        </div>
+
+        <div class="actions">
+            <button id="compressBtn" class="btn btn-primary">Comprimir PDF</button>
+        </div>
+        <div id="compressStatus" style="margin-top:12px;"></div>
+        <div id="loading">⏳ Procesando...</div>
+    </div>
+
+    <script src="js/common.js"></script>
+    <script>
+        // ============================================================
+        // LÓGICA ESPECÍFICA DE COMPRESS
+        // ============================================================
+        let compressFile = null;
+        const compressBtn = document.getElementById('compressBtn');
+
+        setupDropZone('dropZoneCompress', 'fileInputCompress', files => {
+            compressFile = files[0];
+            document.querySelector('#dropZoneCompress p').textContent = `📄 ${compressFile.name}`;
+        });
+
+        compressBtn.addEventListener('click', async () => {
+            if (!compressFile) { alert('Selecciona un PDF para comprimir'); return; }
+
+            const level = document.querySelector('input[name="compressLevel"]:checked').value;
+            compressBtn.disabled = true;
+            showLoading(true);
+            showStatus('compressStatus', '⏳ Procesando optimización...');
+
+            try {
+                const arrayBuffer = await readFileAsArrayBuffer(compressFile);
+                const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+                const totalPages = pdf.numPages;
+
+                let maxDimension, quality;
+                switch (level) {
+                    case 'extreme': maxDimension = 800; quality = 0.5; break;
+                    case 'recommended': maxDimension = 1200; quality = 0.7; break;
+                    case 'low': maxDimension = 1800; quality = 0.85; break;
+                    default: maxDimension = 1200; quality = 0.7;
+                }
+
+                const images = [];
+
+                for (let i = 1; i <= totalPages; i++) {
+                    showStatus('compressStatus', `⏳ Procesando página ${i} de ${totalPages}...`);
+                    const page = await pdf.getPage(i);
+                    const unscaledViewport = page.getViewport({ scale: 1.0 });
+
+                    const currentMax = Math.max(unscaledViewport.width, unscaledViewport.height);
+                    let scale = 1.0;
+                    if (currentMax > maxDimension) scale = maxDimension / currentMax;
+
+                    const viewport = page.getViewport({ scale });
+                    const canvas = document.createElement('canvas');
+                    canvas.width = Math.floor(viewport.width);
+                    canvas.height = Math.floor(viewport.height);
+                    const ctx = canvas.getContext('2d');
+
+                    ctx.fillStyle = '#ffffff';
+                    ctx.fillRect(0, 0, canvas.width, canvas.height);
+                    await page.render({ canvasContext: ctx, viewport }).promise;
+
+                    images.push(canvas.toDataURL('image/jpeg', quality));
+                }
+
+                showStatus('compressStatus', '⏳ Generando documento comprimido...');
+
+                const resp = await fetch('/compress', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ images, level })
+                });
+
+                if (!resp.ok) throw new Error(await resp.text());
+
+                downloadFile(await resp.blob(), `compressed_${level}.pdf`);
+                showStatus('compressStatus', '✅ PDF comprimido correctamente');
+            } catch (err) {
+                showStatus('compressStatus', '❌ ' + err.message, true);
+            } finally {
+                compressBtn.disabled = false;
+                showLoading(false);
+            }
+        });
+    </script>
+</body>
+</html>

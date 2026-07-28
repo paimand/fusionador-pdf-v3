@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Unir PDF - Suite PDF</title>
+    <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,400;14..32,500;14..32,600;14..32,700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="css/common.css">
+</head>
+<body>
+    <div class="container">
+        <header class="tool-header">
+            <a href="index.html" style="text-decoration:none; color:inherit;">
+                <img src="https://i.ibb.co/RTgVzm5q/Suite-PDF-removebg-preview.png" alt="Suite PDF">
+            </a>
+            <p>Combina varios PDFs en uno solo. Arrastra para reordenar.</p>
+        </header>
+
+        <div class="upload-area" id="dropZoneMerge">
+            <p>Arrastra aquí tus PDF o haz clic para seleccionarlos</p>
+            <input type="file" id="fileInputMerge" accept=".pdf" multiple>
+        </div>
+
+        <div class="file-list-header">
+            <h2>Archivos seleccionados</h2>
+            <span class="file-count" id="fileCountMerge">0 archivos</span>
+        </div>
+        <ul id="fileListMerge" class="file-list"></ul>
+
+        <div class="actions">
+            <button id="clearMerge" class="btn btn-secondary">Vaciar lista</button>
+            <button id="mergeBtn" class="btn btn-primary">Unir PDFs</button>
+        </div>
+        <div id="loading">⏳ Procesando...</div>
+    </div>
+
+    <script src="js/common.js"></script>
+    <script>
+        // ============================================================
+        // LÓGICA ESPECÍFICA DE MERGE
+        // ============================================================
+        let mergeFiles = [];
+        const fileListMerge = document.getElementById('fileListMerge');
+        const fileCountMerge = document.getElementById('fileCountMerge');
+        const mergeBtn = document.getElementById('mergeBtn');
+
+        new Sortable(fileListMerge, {
+            animation: 150,
+            ghostClass: 'sortable-ghost',
+            onEnd: function(evt) {
+                const [moved] = mergeFiles.splice(evt.oldIndex, 1);
+                mergeFiles.splice(evt.newIndex, 0, moved);
+                updateMergeCount();
+            }
+        });
+
+        function updateMergeCount() {
+            const count = mergeFiles.length;
+            fileCountMerge.textContent = count === 0 ? '0 archivos' : (count === 1 ? '1 archivo' : `${count} archivos`);
+        }
+
+        function renderMergeList() {
+            fileListMerge.innerHTML = '';
+            mergeFiles.forEach((file, index) => {
+                const li = document.createElement('li');
+                const thumbDiv = document.createElement('div');
+                thumbDiv.className = 'thumbnail';
+                const canvas = document.createElement('canvas');
+                thumbDiv.appendChild(canvas);
+                li.appendChild(thumbDiv);
+                renderThumbnail(file, canvas);
+
+                const infoDiv = document.createElement('div');
+                infoDiv.className = 'file-info';
+                const nameSpan = document.createElement('div');
+                nameSpan.className = 'file-name';
+                nameSpan.textContent = file.name;
+                const metaSpan = document.createElement('div');
+                metaSpan.className = 'file-meta';
+                metaSpan.textContent = (file.size / 1024).toFixed(1) + ' KB';
+                infoDiv.appendChild(nameSpan);
+                infoDiv.appendChild(metaSpan);
+                li.appendChild(infoDiv);
+
+                const delBtn = document.createElement('button');
+                delBtn.className = 'delete-btn';
+                delBtn.textContent = '×';
+                delBtn.addEventListener('click', () => {
+                    mergeFiles.splice(index, 1);
+                    renderMergeList();
+                });
+                li.appendChild(delBtn);
+                fileListMerge.appendChild(li);
+            });
+            updateMergeCount();
+        }
+
+        setupDropZone('dropZoneMerge', 'fileInputMerge', files => {
+            const pdfFiles = Array.from(files).filter(f => f.type === 'application/pdf' || f.name.endsWith('.pdf'));
+            if (pdfFiles.length === 0) { alert('Solo se permiten PDF'); return; }
+            mergeFiles.push(...pdfFiles);
+            renderMergeList();
+        });
+
+        document.getElementById('clearMerge').addEventListener('click', () => { mergeFiles = []; renderMergeList(); });
+
+        mergeBtn.addEventListener('click', async () => {
+            if (mergeFiles.length === 0) { alert('No hay archivos para unir'); return; }
+            mergeBtn.disabled = true;
+            showLoading(true);
+            try {
+                const formData = new FormData();
+                mergeFiles.forEach(f => formData.append('pdfs', f));
+                const resp = await fetch('/merge', { method: 'POST', body: formData });
+                if (!resp.ok) throw new Error(await resp.text());
+                downloadFile(await resp.blob(), 'merged.pdf');
+            } catch (err) {
+                alert('Error: ' + err.message);
+            } finally {
+                mergeBtn.disabled = false;
+                showLoading(false);
+            }
+        });
+
+        updateMergeCount();
+    </script>
+</body>
+</html>

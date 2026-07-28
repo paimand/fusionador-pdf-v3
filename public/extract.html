@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Extraer páginas - Suite PDF</title>
+    <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,400;14..32,500;14..32,600;14..32,700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="css/common.css">
+</head>
+<body>
+    <div class="container">
+        <header class="tool-header">
+            <a href="index.html" style="text-decoration:none; color:inherit;">
+                <img src="https://i.ibb.co/RTgVzm5q/Suite-PDF-removebg-preview.png" alt="Suite PDF">
+            </a>
+            <p>Extrae páginas específicas a un nuevo PDF.</p>
+        </header>
+
+        <div class="upload-area" id="dropZoneExtract">
+            <p>Arrastra o selecciona un PDF para extraer páginas</p>
+            <input type="file" id="fileInputExtract" accept=".pdf">
+        </div>
+
+        <div id="extractPreview" style="display:none; margin-bottom:16px;">
+            <div class="grid-controls">
+                <button id="extractSelectAll" class="btn btn-secondary" style="padding:6px 14px;">Seleccionar todas</button>
+                <button id="extractDeselectAll" class="btn btn-secondary" style="padding:6px 14px;">Deseleccionar todas</button>
+            </div>
+            <div id="extractPageGrid" class="page-grid"></div>
+        </div>
+
+        <div style="margin:16px 0;">
+            <label for="extractPages">O escribe páginas a extraer (ej. 1,3-5,7):</label>
+            <input type="text" id="extractPages" placeholder="Ej: 1,3-5,7" style="width:100%;padding:8px;border:1px solid #ccc;border-radius:6px;">
+        </div>
+
+        <div class="actions">
+            <button id="extractBtn" class="btn btn-primary">Extraer páginas</button>
+        </div>
+        <div id="extractStatus" style="margin-top:12px;"></div>
+        <div id="loading">⏳ Procesando...</div>
+    </div>
+
+    <script src="js/common.js"></script>
+    <script>
+        // ============================================================
+        // LÓGICA ESPECÍFICA DE EXTRACT
+        // ============================================================
+        let extractFile = null;
+        let extractSelections = [];
+        const extractBtn = document.getElementById('extractBtn');
+        const extractPagesInput = document.getElementById('extractPages');
+
+        setupDropZone('dropZoneExtract', 'fileInputExtract', files => {
+            extractFile = files[0];
+            document.querySelector('#dropZoneExtract p').textContent = `📄 ${extractFile.name}`;
+            renderPageGrid(extractFile, 'extractPageGrid', extractSelections);
+        });
+
+        document.getElementById('extractSelectAll').addEventListener('click', () => {
+            extractSelections.fill(true);
+            renderPageGrid(extractFile, 'extractPageGrid', extractSelections);
+        });
+        document.getElementById('extractDeselectAll').addEventListener('click', () => {
+            extractSelections.fill(false);
+            renderPageGrid(extractFile, 'extractPageGrid', extractSelections);
+        });
+
+        extractBtn.addEventListener('click', async () => {
+            if (!extractFile) { alert('Selecciona un PDF'); return; }
+            let pagesToExtract = extractPagesInput.value.trim();
+            if (!pagesToExtract) {
+                const selected = extractSelections.map((sel, idx) => sel ? idx + 1 : null).filter(v => v !== null);
+                if (selected.length === 0) { alert('Selecciona al menos una página o escribe rangos'); return; }
+                pagesToExtract = selected.join(',');
+            }
+            
+            extractBtn.disabled = true;
+            showLoading(true);
+            try {
+                const formData = new FormData();
+                formData.append('file', extractFile);
+                formData.append('pagesToExtract', pagesToExtract);
+                const resp = await fetch('/extract-pages', { method: 'POST', body: formData });
+                if (!resp.ok) throw new Error(await resp.text());
+                downloadFile(await resp.blob(), 'extracted.pdf');
+                showStatus('extractStatus', '✅ Páginas extraídas correctamente');
+            } catch (err) {
+                showStatus('extractStatus', '❌ ' + err.message, true);
+            } finally {
+                extractBtn.disabled = false;
+                showLoading(false);
+            }
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Suite PDF - Herramientas</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,400;14..32,500;14..32,600;14..32,700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="css/common.css">
+    <style>
+        /* Estilos específicos para el index */
+        .tools-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+            gap: 24px;
+            margin-top: 30px;
+        }
+        .tool-card {
+            background: #fafafc;
+            border: 1px solid #e5e5ea;
+            border-radius: 16px;
+            padding: 24px 16px;
+            text-align: center;
+            transition: all 0.2s;
+            text-decoration: none;
+            color: #1d1d1f;
+        }
+        .tool-card:hover {
+            border-color: #ec9b59;
+            box-shadow: 0 4px 16px rgba(236, 155, 89, 0.2);
+            transform: translateY(-2px);
+        }
+        .tool-card .icon {
+            font-size: 40px;
+            display: block;
+            margin-bottom: 12px;
+        }
+        .tool-card h3 {
+            font-size: 18px;
+            font-weight: 600;
+            margin-bottom: 6px;
+        }
+        .tool-card p {
+            font-size: 14px;
+            color: #6e6e73;
+            margin: 0;
+        }
+        .tool-card .coming-soon {
+            background: #f0f0f2;
+            border-radius: 20px;
+            padding: 4px 12px;
+            font-size: 12px;
+            font-weight: 500;
+            color: #86868b;
+            display: inline-block;
+            margin-top: 8px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header class="tool-header">
+            <img src="https://i.ibb.co/RTgVzm5q/Suite-PDF-removebg-preview.png" alt="Suite PDF">
+            <p>Herramientas gratuitas para trabajar con PDF. Elige una opción.</p>
+        </header>
+
+        <div class="tools-grid">
+            <a href="merge.html" class="tool-card">
+                <span class="icon">📑</span>
+                <h3>Unir PDF</h3>
+                <p>Combina varios PDFs en uno</p>
+            </a>
+            <a href="split.html" class="tool-card">
+                <span class="icon">✂️</span>
+                <h3>Dividir PDF</h3>
+                <p>Divide un PDF en partes</p>
+            </a>
+            <a href="delete.html" class="tool-card">
+                <span class="icon">🗑️</span>
+                <h3>Eliminar páginas</h3>
+                <p>Quita páginas de un PDF</p>
+            </a>
+            <a href="extract.html" class="tool-card">
+                <span class="icon">📤</span>
+                <h3>Extraer páginas</h3>
+                <p>Extrae páginas a un nuevo PDF</p>
+            </a>
+            <a href="reorder.html" class="tool-card">
+                <span class="icon">🔄</span>
+                <h3>Ordenar páginas</h3>
+                <p>Reordena las páginas de un PDF</p>
+            </a>
+            <a href="compress.html" class="tool-card">
+                <span class="icon">📦</span>
+                <h3>Comprimir PDF</h3>
+                <p>Reduce el tamaño del PDF</p>
+            </a>
+        </div>
+    </div>
+</body>
+</html>
