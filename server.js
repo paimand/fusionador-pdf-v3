@@ -46,8 +46,7 @@ async function cleanPdfBuffer(inputBuffer) {
 }
 
 /**
- * Convierte un string de rangos/páginas (ej: "3,1,2" o "1,3-5,7") en un array 
- * preservando EXACTAMENTE el orden especificado (sin reordenar numéricamente).
+ * Convierte un string de rangos/páginas en un array preservando EXACTAMENTE el orden especificado.
  */
 function parsePageRanges(rangesStr, totalPages) {
   const pageIndices = [];
@@ -80,6 +79,47 @@ function parsePageRanges(rangesStr, totalPages) {
 
   return pageIndices;
 }
+
+// ------------------------------------------------------------
+// RUTA: COMPRIMIR PDF
+// ------------------------------------------------------------
+app.post('/compress', upload.any(), async (req, res) => {
+  const tempId = Date.now() + '_' + Math.random().toString(36).substring(2, 9);
+  const inputPath = path.join(os.tmpdir(), `compress_in_${tempId}.pdf`);
+  const outputPath = path.join(os.tmpdir(), `compress_out_${tempId}.pdf`);
+
+  try {
+    if (!req.files || req.files.length === 0) {
+      return res.status(400).json({ error: 'No se ha subido ningún archivo PDF.' });
+    }
+
+    const file = req.files[0];
+    await fs.writeFile(inputPath, file.buffer);
+
+    // Argumentos de optimización con qpdf
+    const qpdfArgs = [
+      '--linearize',
+      '--object-streams=generate',
+      '--recompress-flate',
+      inputPath,
+      outputPath
+    ];
+
+    await execFileAsync('qpdf', qpdfArgs);
+    const compressedBuffer = await fs.readFile(outputPath);
+
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', 'attachment; filename="comprimido.pdf"');
+    res.send(compressedBuffer);
+
+  } catch (err) {
+    console.error('Error general en /compress:', err);
+    res.status(500).send('Error al comprimir el archivo PDF: ' + err.message);
+  } finally {
+    await fs.unlink(inputPath).catch(() => {});
+    await fs.unlink(outputPath).catch(() => {});
+  }
+});
 
 // ------------------------------------------------------------
 // RUTA: UNIR PDFs
@@ -164,7 +204,6 @@ app.post('/split', upload.any(), async (req, res) => {
       return res.send(zipBuffer);
 
     } else {
-      // Modo Rangos / Reordenar / Extraer: copia página por página en el orden recibido
       const targetIndices = parsePageRanges(rangesStr, totalPages);
 
       if (targetIndices.length === 0) {
