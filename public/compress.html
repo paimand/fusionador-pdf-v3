@@ -16,7 +16,7 @@
             <a href="index.html" style="text-decoration:none; color:inherit;">
                 <img src="https://i.ibb.co/RTgVzm5q/Suite-PDF-removebg-preview.png" alt="Suite PDF">
             </a>
-            <p>Reduce el tamaño de tu archivo PDF optimizando sus objetos y estructura interna.</p>
+            <p>Reduce el tamaño de tu archivo PDF ajustando la calidad de sus imágenes y estructura.</p>
         </header>
 
         <div class="upload-area" id="dropZoneCompress">
@@ -26,11 +26,12 @@
 
         <div id="compressOptions" style="display:none; margin-bottom:16px;">
             <label for="compressionLevel" style="font-size:0.9rem; font-weight:600; color:#374151; display:block; margin-bottom:6px;">
-                Nivel de optimización:
+                Nivel de compresión:
             </label>
             <select id="compressionLevel" class="select-control">
-                <option value="medium" selected>Recomendada (Balance de peso y calidad)</option>
-                <option value="high">Alta compresión (Mayor reducción de peso)</option>
+                <option value="extreme">1- Compresión Extrema (Menos calidad, alta compresión)</option>
+                <option value="recommended" selected>2- Compresión Recomendada (Buena calidad, buena compresión)</option>
+                <option value="low">3- Baja compresión (Alta calidad, menos compresión)</option>
             </select>
         </div>
 
