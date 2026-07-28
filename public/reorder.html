@@ -3,134 +3,42 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Ordenar páginas - Suite PDF</title>
+    <title>Reordenar Páginas PDF - Suite PDF</title>
     <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,400;14..32,500;14..32,600;14..32,700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="css/common.css">
+    <link rel="stylesheet" href="css/reorder.css">
 </head>
 <body>
     <div class="container">
+        <a href="index.html" class="back-link">← Volver al inicio</a>
+
         <header class="tool-header">
             <a href="index.html" style="text-decoration:none; color:inherit;">
                 <img src="https://i.ibb.co/RTgVzm5q/Suite-PDF-removebg-preview.png" alt="Suite PDF">
             </a>
-            <p>Reordena las páginas de tu PDF arrastrando las miniaturas.</p>
+            <p>Arrastra las páginas para cambiar el orden del documento.</p>
         </header>
 
         <div class="upload-area" id="dropZoneReorder">
-            <p>Arrastra o selecciona un PDF para ordenar sus páginas</p>
+            <p>Arrastra o selecciona un PDF para reordenar páginas</p>
             <input type="file" id="fileInputReorder" accept=".pdf">
         </div>
 
-        <div style="margin:16px 0;">
-            <p>Arrastra las miniaturas para reordenar las páginas</p>
-            <ul id="pageList" class="file-list" style="min-height:60px;"></ul>
+        <div id="reorderPreview" style="display:none; margin-bottom:16px;">
+            <p style="font-size: 0.85rem; color: #6b7280; margin-bottom: 8px;">💡 Arrastra las tarjetas para cambiar la secuencia de páginas.</p>
+            <div id="reorderPageGrid" class="page-grid"></div>
         </div>
 
         <div class="actions">
-            <button id="reorderBtn" class="btn btn-primary">Aplicar nuevo orden</button>
+            <button id="reorderBtn" class="btn btn-primary">Guardar Nuevo Orden</button>
         </div>
         <div id="reorderStatus" style="margin-top:12px;"></div>
-        <div id="loading">⏳ Procesando...</div>
+        <div id="loading" style="display:none;">⏳ Procesando...</div>
     </div>
 
     <script src="js/common.js"></script>
-    <script>
-        // ============================================================
-        // LÓGICA ESPECÍFICA DE REORDER
-        // ============================================================
-        let reorderFile = null;
-        let pageOrder = [];
-        const reorderBtn = document.getElementById('reorderBtn');
-        const pageList = document.getElementById('pageList');
-
-        // Sortable para la lista de páginas
-        new Sortable(pageList, {
-            animation: 150,
-            ghostClass: 'sortable-ghost',
-            draggable: '.reorder-item',
-            onEnd: function() {
-                const items = pageList.querySelectorAll('.reorder-item');
-                pageOrder = Array.from(items).map(item => parseInt(item.dataset.page));
-            }
-        });
-
-        async function loadReorderPages(file) {
-            try {
-                const arrayBuffer = await readFileAsArrayBuffer(file);
-                const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
-                const totalPages = pdf.numPages;
-                pageOrder = Array.from({ length: totalPages }, (_, i) => i + 1);
-                pageList.innerHTML = '';
-
-                for (let i = 1; i <= totalPages; i++) {
-                    const li = document.createElement('li');
-                    li.className = 'reorder-item';
-                    li.dataset.page = i;
-
-                    const canvas = document.createElement('canvas');
-                    canvas.style.pointerEvents = 'none';
-                    li.appendChild(canvas);
-
-                    const label = document.createElement('div');
-                    label.className = 'page-number';
-                    label.textContent = `Pág. ${i}`;
-                    li.appendChild(label);
-
-                    pageList.appendChild(li);
-
-                    try {
-                        const page = await pdf.getPage(i);
-                        const scale = 0.3;
-                        const viewport = page.getViewport({ scale });
-                        canvas.width = viewport.width;
-                        canvas.height = viewport.height;
-                        const ctx = canvas.getContext('2d');
-                        await page.render({ canvasContext: ctx, viewport }).promise;
-                    } catch (_) {
-                        const ctx = canvas.getContext('2d');
-                        ctx.fillStyle = '#f0f0f2';
-                        ctx.fillRect(0, 0, canvas.width || 120, canvas.height || 160);
-                        ctx.fillStyle = '#86868b';
-                        ctx.font = '12px sans-serif';
-                        ctx.textAlign = 'center';
-                        ctx.textBaseline = 'middle';
-                        ctx.fillText('Pág. ' + i, (canvas.width || 120) / 2, (canvas.height || 160) / 2);
-                    }
-                }
-            } catch (err) {
-                alert('Error al cargar las páginas: ' + err.message);
-            }
-        }
-
-        setupDropZone('dropZoneReorder', 'fileInputReorder', files => {
-            reorderFile = files[0];
-            document.querySelector('#dropZoneReorder p').textContent = `📄 ${reorderFile.name}`;
-            loadReorderPages(reorderFile);
-        });
-
-        reorderBtn.addEventListener('click', async () => {
-            if (!reorderFile) { alert('Selecciona un PDF'); return; }
-            if (pageOrder.length === 0) { alert('No hay páginas para ordenar'); return; }
-            
-            reorderBtn.disabled = true;
-            showLoading(true);
-            try {
-                const formData = new FormData();
-                formData.append('file', reorderFile);
-                formData.append('newOrder', JSON.stringify(pageOrder));
-                const resp = await fetch('/reorder-pages', { method: 'POST', body: formData });
-                if (!resp.ok) throw new Error(await resp.text());
-                downloadFile(await resp.blob(), 'reordered.pdf');
-                showStatus('reorderStatus', '✅ Nuevo orden aplicado');
-            } catch (err) {
-                showStatus('reorderStatus', '❌ ' + err.message, true);
-            } finally {
-                reorderBtn.disabled = false;
-                showLoading(false);
-            }
-        });
-    </script>
+    <script src="js/reorder.js"></script>
 </body>
 </html>
