@@ -31,7 +31,7 @@ async function loadAndRenderPdf(file) {
 
             const card = document.createElement('div');
             card.className = 'page-card-reorder';
-            card.dataset.pageIndex = i; // Número de página original (1-based)
+            card.setAttribute('data-page-index', i); // Asigna explícitamente el número de página original (1, 2, 3...)
 
             const canvas = document.createElement('canvas');
             const ctx = canvas.getContext('2d');
@@ -48,7 +48,6 @@ async function loadAndRenderPdf(file) {
             gridContainer.appendChild(card);
         }
 
-        // Inicializar Sortable.js en el contenedor
         if (sortableInstance) sortableInstance.destroy();
         sortableInstance = new Sortable(gridContainer, {
             animation: 150,
@@ -64,9 +63,9 @@ async function loadAndRenderPdf(file) {
 reorderBtn.addEventListener('click', async () => {
     if (!reorderFile) { alert('Primero selecciona un PDF'); return; }
 
-    // Obtener la secuencia actual de tarjetas según la cuadrícula
+    // Recoge la secuencia real leyendo los elementos del DOM ordenados tras el drag-and-drop
     const cards = gridContainer.querySelectorAll('.page-card-reorder');
-    const newOrderIndices = Array.from(cards).map(card => card.dataset.pageIndex);
+    const newOrderIndices = Array.from(cards).map(card => card.getAttribute('data-page-index'));
 
     if (newOrderIndices.length === 0) {
         alert('No hay páginas para reordenar.');
@@ -82,7 +81,6 @@ reorderBtn.addEventListener('click', async () => {
         formData.append('mode', 'ranges');
         formData.append('ranges', newOrderIndices.join(','));
 
-        // Reutilizamos la ruta /split enviándole la nueva secuencia de páginas en orden
         const resp = await fetch('/split', { method: 'POST', body: formData });
         if (!resp.ok) {
             const errText = await resp.text();
