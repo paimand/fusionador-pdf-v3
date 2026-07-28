@@ -4,7 +4,7 @@ const { PDFDocument } = require('pdf-lib');
 const JSZip = require('jszip');
 const { execFile } = require('child_process');
 const fs = require('fs/promises');
-const path = path = require('path');
+const path = require('path');
 const os = require('os');
 const util = require('util');
 
@@ -55,6 +55,8 @@ function parsePageRanges(rangesStr, totalPages) {
 
   for (const part of parts) {
     const trimmed = part.trim();
+    if (!trimmed) continue;
+
     if (trimmed.includes('-')) {
       const [start, end] = trimmed.split('-').map(num => parseInt(num.trim(), 10));
       if (!isNaN(start) && !isNaN(end)) {
@@ -134,7 +136,6 @@ app.post('/split', upload.any(), async (req, res) => {
         return res.status(400).json({ error: 'No se seleccionaron páginas válidas para dividir.' });
       }
 
-      // Si solo se selecciona 1 página, devuelve un PDF individual
       if (targetIndices.length === 1) {
         const singlePdf = await PDFDocument.create();
         const [copiedPage] = await singlePdf.copyPages(srcPdf, targetIndices);
@@ -146,7 +147,6 @@ app.post('/split', upload.any(), async (req, res) => {
         return res.send(Buffer.from(pdfBytes));
       }
 
-      // Si se seleccionan varias páginas, las empaqueta en un archivo ZIP
       const zip = new JSZip();
 
       for (const idx of targetIndices) {
@@ -164,7 +164,7 @@ app.post('/split', upload.any(), async (req, res) => {
       return res.send(zipBuffer);
 
     } else {
-      // Modo Rangos / Reordenar / Extraer: copia las páginas respetando la secuencia exacta recibida
+      // Modo Rangos / Reordenar / Extraer: copia página por página en el orden recibido
       const targetIndices = parsePageRanges(rangesStr, totalPages);
 
       if (targetIndices.length === 0) {
@@ -212,7 +212,6 @@ app.post('/delete', upload.any(), async (req, res) => {
         .filter(idx => !isNaN(idx) && idx >= 0 && idx < totalPages)
     );
 
-    // Filtrar conservando únicamente las páginas NO marcadas para eliminar
     const keepIndices = [];
     for (let i = 0; i < totalPages; i++) {
       if (!toDeleteSet.has(i)) {
