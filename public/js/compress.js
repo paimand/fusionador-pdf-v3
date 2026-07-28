@@ -1,64 +1,138 @@
-document.addEventListener('DOMContentLoaded', () => {
-    const compressForm = document.getElementById('compressForm');
-    const fileInput = document.getElementById('fileInput');
-    const levelSelect = document.getElementById('compressionLevel');
-    const submitBtn = document.getElementById('submitBtn');
-    const statusDiv = document.getElementById('statusMessage');
+// ============================================================
+// COMPRESS (comprimir PDF en cliente)
+// ============================================================
+let compressFile = null;
+const dropZoneCompress = document.getElementById('dropZoneCompress');
+const fileInputCompress = document.getElementById('fileInputCompress');
+const compressBtn = document.getElementById('compressBtn');
 
-    if (!compressForm) return;
-
-    compressForm.addEventListener('submit', async (e) => {
+// Evitar comportamientos por defecto del navegador al arrastrar
+['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+    dropZoneCompress.addEventListener(eventName, e => {
         e.preventDefault();
+        e.stopPropagation();
+    }, false);
+});
 
-        if (!fileInput.files || fileInput.files.length === 0) {
-            showStatus('Por favor, selecciona un archivo PDF.', 'error');
-            return;
+// Resaltar la zona de arrastre al pasar el archivo por encima
+['dragenter', 'dragover'].forEach(eventName => {
+    dropZoneCompress.addEventListener(eventName, () => {
+        dropZoneCompress.classList.add('dragover');
+    }, false);
+});
+
+['dragleave', 'drop'].forEach(eventName => {
+    dropZoneCompress.addEventListener(eventName, () => {
+        dropZoneCompress.classList.remove('dragover');
+    }, false);
+});
+
+// Manejo del evento drop (soltar archivo)
+dropZoneCompress.addEventListener('drop', e => {
+    const dt = e.dataTransfer;
+    const files = dt.files;
+
+    if (files && files.length > 0) {
+        const file = files[0];
+        if (file.type === 'application/pdf' || file.name.endsWith('.pdf')) {
+            compressFile = file;
+            dropZoneCompress.querySelector('p').textContent = `📄 ${compressFile.name}`;
+            
+            // Asignar el archivo al input por consistencia
+            const dataTransfer = new DataTransfer();
+            dataTransfer.items.add(compressFile);
+            fileInputCompress.files = dataTransfer.files;
+        } else {
+            alert('Por favor, selecciona un archivo PDF válido.');
+        }
+    }
+});
+
+// Selección mediante clic convencional
+dropZoneCompress.addEventListener('click', () => fileInputCompress.click());
+
+fileInputCompress.addEventListener('change', e => {
+    if (e.target.files.length > 0) {
+        compressFile = e.target.files[0];
+        dropZoneCompress.querySelector('p').textContent = `📄 ${compressFile.name}`;
+    }
+});
+
+compressBtn.addEventListener('click', async () => {
+    if (!compressFile) { alert('Selecciona un PDF para comprimir'); return; }
+
+    const level = document.querySelector('input[name="compressLevel"]:checked').value;
+
+    compressBtn.disabled = true;
+    showLoading(true);
+    showStatus('compressStatus', '⏳ Procesando optimización...');
+
+    try {
+        const arrayBuffer = await readFileAsArrayBuffer(compressFile);
+        const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+        const totalPages = pdf.numPages;
+
+        let maxDimension, quality;
+        switch (level) {
+            case 'extreme': maxDimension = 800; quality = 0.5; break;
+            case 'recommended': maxDimension = 1200; quality = 0.7; break;
+            case 'low': maxDimension = 1800; quality = 0.85; break;
+            default: maxDimension = 1200; quality = 0.7;
         }
 
-        const formData = new FormData();
-        formData.append('file', fileInput.files[0]);
-        formData.append('level', levelSelect ? levelSelect.value : 'recommended');
+        const images = [];
 
-        submitBtn.disabled = true;
-        showStatus('Comprimiendo PDF, por favor espera...', 'info');
+        for (let i = 1; i <= totalPages; i++) {
+            showStatus('compressStatus', `⏳ Procesando página ${i} de ${totalPages}...`);
+            const page = await pdf.getPage(i);
+            const unscaledViewport = page.getViewport({ scale: 1.0 });
 
-        try {
-            const response = await fetch('/compress', {
-                method: 'POST',
-                body: formData
-            });
-
-            if (!response.ok) {
-                const errorData = await response.json().catch(() => ({}));
-                throw new Error(errorData.error || 'Error al procesar la compresión en el servidor.');
+            const currentMax = Math.max(unscaledViewport.width, unscaledViewport.height);
+            let scale = 1.0;
+            if (currentMax > maxDimension) {
+                scale = maxDimension / currentMax;
             }
 
-            // Recibir el archivo comprimido como Blob
-            const blob = await response.blob();
-            const downloadUrl = window.URL.createObjectURL(blob);
-            
-            // Crear enlace de descarga automático
-            const a = document.createElement('a');
-            a.href = downloadUrl;
-            a.download = `comprimido_${Date.now()}.pdf`;
-            document.body.appendChild(a);
-            a.click();
-            a.remove();
-            
-            window.URL.revokeObjectURL(downloadUrl);
-            showStatus('¡PDF comprimido y descargado con éxito!', 'success');
+            const viewport = page.getViewport({ scale });
+            const canvas = document.createElement('canvas');
+            canvas.width = Math.floor(viewport.width);
+            canvas.height = Math.floor(viewport.height);
+            const ctx = canvas.getContext('2d');
 
-        } catch (error) {
-            console.error('Error:', error);
-            showStatus(error.message, 'error');
-        } finally {
-            submitBtn.disabled = false;
+            ctx.fillStyle = '#ffffff';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            await page.render({ canvasContext: ctx, viewport }).promise;
+
+            const dataUrl = canvas.toDataURL('image/jpeg', quality);
+            images.push(dataUrl);
         }
-    });
 
-    function showStatus(message, type) {
-        if (!statusDiv) return;
-        statusDiv.textContent = message;
-        statusDiv.className = `status-message ${type}`;
+        showStatus('compressStatus', '⏳ Generando documento comprimido...');
+
+        const resp = await fetch('/compress', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ images, level })
+        });
+
+        if (!resp.ok) throw new Error(await resp.text());
+
+        const blob = await resp.blob();
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `compressed_${level}.pdf`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+
+        showStatus('compressStatus', '✅ PDF comprimido correctamente');
+    } catch (err) {
+        showStatus('compressStatus', '❌ ' + err.message, true);
+    } finally {
+        compressBtn.disabled = false;
+        showLoading(false);
     }
 });
