@@ -4,83 +4,123 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Comprimir PDF - Suite PDF</title>
-    <link rel="stylesheet" href="css/style.css">
-    <!-- Cargar pdf.js para procesamiento rápido en cliente -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
-    <script>
-        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
-    </script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,400;14..32,500;14..32,600;14..32,700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/css/common.css">
+    <style>
+        .back-link {
+            display: inline-block;
+            margin-bottom: 20px;
+            color: #ec9b59;
+            text-decoration: none;
+            font-weight: 500;
+        }
+        .back-link:hover {
+            text-decoration: underline;
+        }
+        .options-container {
+            margin-top: 24px;
+            text-align: left;
+        }
+        .options-container h3 {
+            font-size: 1.1rem;
+            margin-bottom: 12px;
+            color: #1e293b;
+        }
+        .radio-group {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+        .radio-option {
+            display: flex;
+            align-items: flex-start;
+            gap: 12px;
+            padding: 12px 16px;
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: background-color 0.2s, border-color 0.2s;
+        }
+        .radio-option:hover {
+            background-color: #f8fafc;
+            border-color: #cbd5e1;
+        }
+        .radio-option input[type="radio"] {
+            margin-top: 3px;
+            accent-color: #ec9b59;
+        }
+        .option-text strong {
+            display: block;
+            color: #0f172a;
+            font-size: 0.95rem;
+        }
+        .option-text p {
+            margin: 2px 0 0 0;
+            color: #64748b;
+            font-size: 0.85rem;
+        }
+    </style>
 </head>
 <body>
-    <header>
-        <nav class="navbar">
-            <div class="logo">
-                <a href="/">📄 SuitePDF</a>
+
+    <div class="container">
+        <a href="/" class="back-link">← Volver al inicio</a>
+
+        <header class="tool-header">
+            <img src="https://i.ibb.co/RTgVzm5q/Suite-PDF-removebg-preview.png" alt="Suite PDF">
+            <h1>Comprimir PDF</h1>
+            <p>Consigue que tu documento sea más liviano manteniendo la mejor calidad posible.</p>
+        </header>
+
+        <!-- Área de subida -->
+        <div class="upload-area" id="dropZoneCompress">
+            <p>Arrastra aquí tu PDF o haz clic para seleccionarlo</p>
+            <input type="file" id="fileInputCompress" accept=".pdf">
+        </div>
+
+        <!-- Opciones de nivel de compresión (Sin porcentajes ni paréntesis) -->
+        <div class="options-container">
+            <h3>Nivel de compresión</h3>
+            <div class="radio-group">
+                <label class="radio-option">
+                    <input type="radio" name="compressLevel" value="extreme">
+                    <div class="option-text">
+                        <strong>Compresión extrema</strong>
+                        <p>Menor calidad, alta compresión</p>
+                    </div>
+                </label>
+
+                <label class="radio-option">
+                    <input type="radio" name="compressLevel" value="recommended" checked>
+                    <div class="option-text">
+                        <strong>Compresión recomendada</strong>
+                        <p>Buena calidad, buena compresión</p>
+                    </div>
+                </label>
+
+                <label class="radio-option">
+                    <input type="radio" name="compressLevel" value="low">
+                    <div class="option-text">
+                        <strong>Baja compresión</strong>
+                        <p>Alta calidad, menos compresión</p>
+                    </div>
+                </label>
             </div>
-            <ul class="nav-links">
-                <li><a href="/merge.html">Unir PDF</a></li>
-                <li><a href="/split.html">Dividir PDF</a></li>
-                <li><a href="/compress.html" class="active">Comprimir PDF</a></li>
-            </ul>
-        </nav>
-    </header>
+        </div>
 
-    <main class="container">
-        <section class="tool-section">
-            <h1>Comprimir archivo PDF</h1>
-            <p class="subtitle">Consigue que tu documento sea más liviano manteniendo la mejor calidad posible.</p>
+        <!-- Acciones -->
+        <div class="actions" style="margin-top: 24px;">
+            <button id="compressBtn" class="btn btn-primary">Comprimir PDF</button>
+        </div>
 
-            <!-- Zona de subida de archivos -->
-            <div id="dropZoneCompress" class="drop-zone">
-                <p>Arrastra y suelta tu archivo PDF aquí o haz clic para seleccionar</p>
-                <input type="file" id="fileInputCompress" accept="application/pdf" hidden>
-            </div>
+        <!-- Mensajes de estado -->
+        <div id="compressStatus" style="margin-top:12px;"></div>
+        <div id="loading">⏳ Procesando... Por favor espera.</div>
+    </div>
 
-            <!-- Opciones de nivel de compresión (Sin porcentajes ni texto entre paréntesis) -->
-            <div class="options-container">
-                <h3>Nivel de compresión</h3>
-                <div class="radio-group">
-                    <label class="radio-option">
-                        <input type="radio" name="compressLevel" value="extreme">
-                        <span class="radio-custom"></span>
-                        <div class="option-text">
-                            <strong>Compresión extrema</strong>
-                            <p>Menor calidad, alta compresión</p>
-                        </div>
-                    </label>
+    <script src="/js/common.js"></script>
+    <script src="/js/compress.js"></script>
 
-                    <label class="radio-option">
-                        <input type="radio" name="compressLevel" value="recommended" checked>
-                        <span class="radio-custom"></span>
-                        <div class="option-text">
-                            <strong>Compresión recomendada</strong>
-                            <p>Buena calidad, buena compresión</p>
-                        </div>
-                    </label>
-
-                    <label class="radio-option">
-                        <input type="radio" name="compressLevel" value="low">
-                        <span class="radio-custom"></span>
-                        <div class="option-text">
-                            <strong>Baja compresión</strong>
-                            <p>Alta calidad, menos compresión</p>
-                        </div>
-                    </label>
-                </div>
-            </div>
-
-            <!-- Botón de acción -->
-            <div class="action-container">
-                <button id="compressBtn" class="btn btn-primary">Comprimir PDF</button>
-            </div>
-
-            <!-- Mensaje de estado -->
-            <div id="compressStatus" class="status-message"></div>
-        </section>
-    </main>
-
-    <!-- Scripts utilitarios y lógica principal -->
-    <script src="js/utils.js"></script>
-    <script src="js/compress.js"></script>
 </body>
 </html>
