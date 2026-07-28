@@ -1,4 +1,6 @@
-/* ===== RESET Y BASE ===== */
+/* ============================================================
+   RESET Y BASE
+   ============================================================ */
 * {
     box-sizing: border-box;
     margin: 0;
@@ -9,9 +11,14 @@ body {
     font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
     background: #f2f4f7;
     color: #1d1d1f;
-    padding: 40px 20px;
+    min-height: 100vh;
     display: flex;
-    justify-content: center;
+    flex-direction: column;
+    align-items: center;
+    padding-top: 80px; /* Margen superior para librar la barra fija */
+    padding-bottom: 40px;
+    padding-left: 20px;
+    padding-right: 20px;
 }
 
 .container {
@@ -21,9 +28,164 @@ body {
     border-radius: 24px;
     box-shadow: 0 12px 40px rgba(0, 0, 0, 0.08);
     padding: 40px 36px 36px;
+    margin: 0 auto;
 }
 
-/* ===== HEADER ===== */
+/* ============================================================
+   NUEVA BARRA DE NAVEGACIÓN SUPERIOR (Estilo iLovePDF)
+   ============================================================ */
+#app-header {
+    width: 100%;
+    position: fixed;
+    top: 0;
+    left: 0;
+    z-index: 1000;
+}
+
+.navbar-ilove {
+    background: #ffffff;
+    border-bottom: 1px solid #e5e5ea;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.03);
+    height: 65px;
+    display: flex;
+    align-items: center;
+    padding: 0 24px;
+}
+
+.navbar-container {
+    max-width: 1200px;
+    width: 100%;
+    margin: 0 auto;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.navbar-brand {
+    display: flex;
+    align-items: center;
+    text-decoration: none;
+}
+
+.brand-logo {
+    height: 38px;
+    width: auto;
+    object-fit: contain;
+}
+
+.navbar-nav {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.nav-link {
+    color: #1d1d1f;
+    text-decoration: none;
+    font-weight: 600;
+    font-size: 14px;
+    padding: 10px 16px;
+    border-radius: 8px;
+    transition: background 0.2s, color 0.2s;
+    letter-spacing: 0.3px;
+}
+
+.nav-link:hover {
+    background: #fff7ed;
+    color: #ec9b59;
+}
+
+.nav-link.active {
+    color: #ec9b59;
+    background: #fff7ed;
+}
+
+/* MENÚ DESPLEGABLE (Dropdown) */
+.dropdown {
+    position: relative;
+    display: inline-block;
+}
+
+.dropdown-toggle {
+    background: none;
+    border: none;
+    color: #1d1d1f;
+    font-weight: 600;
+    font-size: 14px;
+    padding: 10px 16px;
+    border-radius: 8px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    transition: background 0.2s, color 0.2s;
+}
+
+.dropdown-toggle:hover {
+    background: #fff7ed;
+    color: #ec9b59;
+}
+
+.dropdown-arrow {
+    font-size: 10px;
+    transition: transform 0.2s;
+}
+
+.dropdown-menu {
+    display: none;
+    position: absolute;
+    right: 0;
+    top: calc(100% + 8px);
+    background-color: #ffffff;
+    min-width: 280px;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.12);
+    border-radius: 14px;
+    border: 1px solid #e5e5ea;
+    padding: 8px;
+    z-index: 1010;
+}
+
+.dropdown-menu.show {
+    display: block;
+}
+
+.dropdown-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 14px;
+    text-decoration: none;
+    color: #1d1d1f;
+    border-radius: 8px;
+    transition: background 0.2s;
+}
+
+.dropdown-item:hover {
+    background: #f8f8fc;
+}
+
+.dropdown-item .icon {
+    font-size: 20px;
+}
+
+.dropdown-item .item-text {
+    display: flex;
+    flex-direction: column;
+}
+
+.dropdown-item .item-text strong {
+    font-size: 14px;
+    color: #1d1d1f;
+}
+
+.dropdown-item .item-text small {
+    font-size: 12px;
+    color: #86868b;
+}
+
+/* ============================================================
+   HEADER INTERNO DE HERRAMIENTA
+   ============================================================ */
 .tool-header {
     text-align: center;
     margin-bottom: 28px;
@@ -44,7 +206,9 @@ body {
     margin: 0 auto;
 }
 
-/* ===== ÁREA DE SUBIDA ===== */
+/* ============================================================
+   ÁREA DE SUBIDA (DROPZONE)
+   ============================================================ */
 .upload-area {
     border: 2px dashed #d2d2d7;
     border-radius: 18px;
@@ -79,7 +243,9 @@ body {
     color: #1d1d1f;
 }
 
-/* ===== LISTA DE ARCHIVOS ===== */
+/* ============================================================
+   LISTA DE ARCHIVOS
+   ============================================================ */
 .file-list-header {
     display: flex;
     justify-content: space-between;
@@ -174,7 +340,9 @@ body {
     color: #ff3b30;
 }
 
-/* ===== VISTA PREVIA DE PÁGINAS (Split, Delete, Extract, Reorder) ===== */
+/* ============================================================
+   VISTA PREVIA DE PÁGINAS (Grid Layout)
+   ============================================================ */
 .page-grid, #pageList {
     display: grid !important;
     grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)) !important;
@@ -261,7 +429,9 @@ body {
     margin-bottom: 12px;
 }
 
-/* ===== BOTONES ===== */
+/* ============================================================
+   BOTONES Y ACCIONES
+   ============================================================ */
 .actions {
     display: flex;
     gap: 14px;
@@ -307,7 +477,9 @@ body {
     background: #e5e5ea;
 }
 
-/* ===== LOADING ===== */
+/* ============================================================
+   ESTADOS Y CARGA
+   ============================================================ */
 #loading {
     margin-top: 24px;
     text-align: center;
@@ -317,62 +489,66 @@ body {
     display: none;
 }
 
-/* ===== RESPONSIVE ===== */
-@media (max-width: 600px) {
-    .container {
-        padding: 20px 16px;
-    }
-    .btn {
-        width: 100%;
-        justify-content: center;
-    }
-    .actions {
-        flex-direction: column;
-    }
-    .page-grid, #pageList {
-        grid-template-columns: repeat(auto-fill, minmax(90px, 1fr)) !important;
-    }
-    .tool-header img {
-        max-width: 200px;
-    }
-}
-
 /* ============================================================
-   ESTILOS PARA HEADER Y FOOTER DINÁMICOS
+   PIE DE PÁGINA
    ============================================================ */
-.main-nav {
-    display: flex;
-    justify-content: center;
-    gap: 16px;
-    margin-top: 16px;
-}
-
-.nav-item {
-    color: #64748b;
-    text-decoration: none;
-    font-weight: 500;
-    font-size: 0.95rem;
-    padding: 6px 14px;
-    border-radius: 6px;
-    transition: all 0.2s ease;
-}
-
-.nav-item:hover {
-    color: #ec9b59;
-    background-color: #fff7ed;
-}
-
-.nav-item.active {
-    color: #ec9b59;
-    background-color: #fff7ed;
-    font-weight: 600;
+#app-footer {
+    width: 100%;
+    max-width: 900px;
+    margin-top: 20px;
 }
 
 .app-footer {
-    margin-top: 40px;
     padding-top: 20px;
     border-top: 1px solid #e2e8f0;
     text-align: center;
     color: #94a3b8;
     font-size: 0.85rem;
+}
+
+/* ============================================================
+   ADAPTACIÓN PARA DISPOSITIVOS MÓVILES (Responsive)
+   ============================================================ */
+@media (max-width: 768px) {
+    .navbar-ilove {
+        padding: 0 16px;
+    }
+
+    .navbar-nav .nav-link {
+        display: none; /* Oculta enlaces directos en pantallas muy pequeñas */
+    }
+
+    .dropdown-menu {
+        right: -10px;
+        min-width: 260px;
+    }
+}
+
+@media (max-width: 600px) {
+    body {
+        padding-top: 75px;
+        padding-left: 12px;
+        padding-right: 12px;
+    }
+
+    .container {
+        padding: 24px 16px;
+    }
+
+    .btn {
+        width: 100%;
+        justify-content: center;
+    }
+
+    .actions {
+        flex-direction: column;
+    }
+
+    .page-grid, #pageList {
+        grid-template-columns: repeat(auto-fill, minmax(90px, 1fr)) !important;
+    }
+
+    .tool-header img {
+        max-width: 200px;
+    }
 }
