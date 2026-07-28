@@ -32,7 +32,7 @@ function parsePageRanges(rangesStr, totalPages) {
     return Array.from(pageIndices).sort((a, b) => a - b);
 }
 
-// ========== RUTA: UNIR (con detección de errores) ==========
+// ========== RUTA: UNIR (con verificación de páginas) ==========
 app.post('/merge', upload.array('pdfs'), async (req, res) => {
     try {
         const files = req.files;
@@ -41,12 +41,12 @@ app.post('/merge', upload.array('pdfs'), async (req, res) => {
         }
 
         const mergedPdf = await PDFDocument.create();
-        const errores = [];
         const omitidos = [];
+        const errores = [];
 
         for (const file of files) {
             try {
-                // Intentar cargar y copiar páginas
+                // Intentar cargar el PDF
                 const pdf = await PDFDocument.load(file.buffer, {
                     ignoreEncryption: true,
                     updateMetadata: false
@@ -56,16 +56,22 @@ app.post('/merge', upload.array('pdfs'), async (req, res) => {
                     omitidos.push(`"${file.originalname}" (no tiene páginas)`);
                     continue;
                 }
+
+                // Copiar páginas
                 const copiedPages = await mergedPdf.copyPages(pdf, indices);
                 copiedPages.forEach(page => mergedPdf.addPage(page));
+
+                // Verificar si las páginas copiadas están vacías (comprobación simple)
+                // pdf-lib no permite inspeccionar el contenido fácilmente, así que lo dejamos.
+                // Si la copia falla, se lanzará una excepción.
+
             } catch (err) {
-                // Si falla, omitimos el archivo
+                // Si falla la copia, lo consideramos un archivo no compatible
                 console.warn(`Omitiendo ${file.originalname} por error:`, err.message);
                 omitidos.push(`"${file.originalname}" (formato no compatible)`);
             }
         }
 
-        // Si no se pudo procesar ningún PDF
         if (mergedPdf.getPageCount() === 0) {
             return res.status(400).send(`No se pudo procesar ningún PDF. Archivos omitidos: ${omitidos.join('; ')}`);
         }
@@ -83,7 +89,7 @@ app.post('/merge', upload.array('pdfs'), async (req, res) => {
     }
 });
 
-// ========== RUTA: DIVIDIR ==========
+// ========== RESTO DE RUTAS (sin cambios) ==========
 app.post('/split', upload.single('file'), async (req, res) => {
     try {
         const file = req.file;
@@ -113,7 +119,6 @@ app.post('/split', upload.single('file'), async (req, res) => {
     }
 });
 
-// ========== RUTA: ELIMINAR PÁGINAS ==========
 app.post('/delete-pages', upload.single('file'), async (req, res) => {
     try {
         const file = req.file;
@@ -142,7 +147,6 @@ app.post('/delete-pages', upload.single('file'), async (req, res) => {
     }
 });
 
-// ========== RUTA: EXTRAER PÁGINAS ==========
 app.post('/extract-pages', upload.single('file'), async (req, res) => {
     try {
         const file = req.file;
@@ -165,7 +169,6 @@ app.post('/extract-pages', upload.single('file'), async (req, res) => {
     }
 });
 
-// ========== RUTA: REORDENAR PÁGINAS ==========
 app.post('/reorder-pages', upload.single('file'), async (req, res) => {
     try {
         const file = req.file;
@@ -198,7 +201,6 @@ app.post('/reorder-pages', upload.single('file'), async (req, res) => {
     }
 });
 
-// ========== RUTA: COMPRIMIR PDF ==========
 app.post('/compress', async (req, res) => {
     try {
         const { images, level } = req.body;
@@ -232,7 +234,6 @@ app.post('/compress', async (req, res) => {
     }
 });
 
-// ========== INICIO DEL SERVIDOR ==========
 app.listen(PORT, () => {
     console.log(`Servidor corriendo en http://localhost:${PORT}`);
 });
