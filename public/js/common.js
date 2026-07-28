@@ -96,14 +96,14 @@ async function renderThumbnail(file, canvas, pageNum = 1) {
 }
 
 // ============================================================
-// RASTERIZAR PDF A IMÁGENES (ALTA CALIDAD PARA TEXTOS)
+// RASTERIZAR PDF A IMÁGENES (con parámetros ajustables)
 // ============================================================
 async function rasterizePdfToImages(file, options = {}) {
     const {
-        maxWidth = 2500,        // Ancho máximo en píxeles (alto para texto nítido)
-        quality = 0.92,         // Calidad JPEG (0-1), 0.92 es un buen equilibrio
-        usePNG = false,         // Si es true, usa PNG (sin pérdida) pero archivos más pesados
-        minDimension = 2000     // Si la página es más pequeña, se escala a este ancho mínimo
+        maxWidth = 1500,         // <-- Reducido de 3000 a 1500
+        quality = 0.82,          // <-- Reducido de 0.95 a 0.82
+        minDimension = 1200,     // <-- Reducido de 2000 a 1200
+        usePNG = false
     } = options;
 
     const arrayBuffer = await readFileAsArrayBuffer(file);
@@ -117,22 +117,18 @@ async function rasterizePdfToImages(file, options = {}) {
         let width = viewport.width;
         let height = viewport.height;
 
-        // Escalar manteniendo proporción para que el ancho sea al menos minDimension
-        // y como máximo maxWidth
         let scale = 1.0;
         if (width < minDimension) {
             scale = minDimension / width;
         } else if (width > maxWidth) {
             scale = maxWidth / width;
         }
-        // Si el ancho ya está en el rango, scale = 1.0
 
         const scaledViewport = page.getViewport({ scale });
         const canvas = document.createElement('canvas');
         canvas.width = Math.floor(scaledViewport.width);
         canvas.height = Math.floor(scaledViewport.height);
         const ctx = canvas.getContext('2d');
-        // Fondo blanco para evitar transparencias
         ctx.fillStyle = '#ffffff';
         ctx.fillRect(0, 0, canvas.width, canvas.height);
         await page.render({ canvasContext: ctx, viewport: scaledViewport }).promise;
