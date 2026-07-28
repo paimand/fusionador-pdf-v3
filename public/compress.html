@@ -47,16 +47,14 @@
         <header class="tool-header">
             <img src="https://i.ibb.co/RTgVzm5q/Suite-PDF-removebg-preview.png" alt="Suite PDF">
             <h1>Comprimir PDF</h1>
-            <p>Reduce el tamaño de tu PDF manteniendo la calidad que elijas. Ideal para enviar por correo o almacenar.</p>
+            <p>Reduce el tamaño de tu PDF eligiendo el nivel de compresión.</p>
         </header>
 
-        <!-- Área de subida -->
         <div class="upload-area" id="dropZoneCompress">
             <p>Arrastra o selecciona un PDF para comprimir</p>
             <input type="file" id="fileInputCompress" accept=".pdf">
         </div>
 
-        <!-- Opciones de compresión -->
         <div class="compress-options">
             <label>
                 <input type="radio" name="compressLevel" value="extreme" checked>
@@ -80,7 +78,6 @@
             </label>
         </div>
 
-        <!-- Acciones -->
         <div class="actions">
             <button id="compressBtn" class="btn btn-primary">Comprimir PDF</button>
         </div>
@@ -91,9 +88,6 @@
 
     <script src="/js/common.js"></script>
     <script>
-        // ============================================================
-        // COMPRESS (COMPRIMIR) - CON OPCIONES DE CALIDAD
-        // ============================================================
         let compressFile = null;
         const compressBtn = document.getElementById('compressBtn');
 
@@ -111,42 +105,25 @@
             showStatus('compressStatus', '⏳ Procesando optimización...');
 
             try {
-                // Definir parámetros según nivel
-                let maxWidth, quality, minDimension, usePNG = false;
+                let params = {};
                 switch (level) {
                     case 'extreme':
-                        maxWidth = 1000;
-                        quality = 0.6;
-                        minDimension = 800;
+                        params = { maxWidth: 1000, quality: 0.6, minDimension: 800 };
                         break;
                     case 'recommended':
-                        maxWidth = 1600;
-                        quality = 0.8;
-                        minDimension = 1200;
+                        params = { maxWidth: 1600, quality: 0.8, minDimension: 1200 };
                         break;
                     case 'low':
-                        maxWidth = 2200;
-                        quality = 0.9;
-                        minDimension = 1600;
+                        params = { maxWidth: 2200, quality: 0.9, minDimension: 1600 };
                         break;
                     case 'high-quality':
-                        maxWidth = 3000;
-                        quality = 0.95;
-                        minDimension = 2000;
-                        usePNG = false; // Podríamos usar PNG para máxima calidad, pero pesa mucho
+                        params = { maxWidth: 3000, quality: 0.95, minDimension: 2000 };
                         break;
                     default:
-                        maxWidth = 1600;
-                        quality = 0.8;
-                        minDimension = 1200;
+                        params = { maxWidth: 1600, quality: 0.8, minDimension: 1200 };
                 }
 
-                const images = await rasterizePdfToImages(compressFile, {
-                    maxWidth,
-                    quality,
-                    minDimension,
-                    usePNG
-                });
+                const images = await rasterizePdfToImages(compressFile, params);
 
                 if (images.length === 0) {
                     throw new Error('No se generaron imágenes del PDF');
