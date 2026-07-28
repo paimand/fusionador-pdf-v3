@@ -9,7 +9,6 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,400;14..32,500;14..32,600;14..32,700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="/css/common.css">
     <style>
-        /* Estilos específicos para esta página, si los hay */
         .back-link {
             display: inline-block;
             margin-bottom: 20px;
@@ -19,6 +18,24 @@
         }
         .back-link:hover {
             text-decoration: underline;
+        }
+        .quality-options {
+            margin: 16px 0;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 20px;
+            align-items: center;
+        }
+        .quality-options label {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            cursor: pointer;
+        }
+        .quality-hint {
+            font-size: 14px;
+            color: #6e6e73;
+            margin-left: 4px;
         }
     </style>
 </head>
@@ -30,13 +47,32 @@
         <header class="tool-header">
             <img src="https://i.ibb.co/RTgVzm5q/Suite-PDF-removebg-preview.png" alt="Suite PDF">
             <h1>Unir PDFs</h1>
-            <p>Selecciona varios PDFs y ordénalos arrastrando. Se fusionarán en un solo documento de alta calidad.</p>
+            <p>Selecciona varios PDFs, ordénalos y elige la calidad del resultado.</p>
         </header>
 
         <!-- Área de subida -->
         <div class="upload-area" id="dropZoneMerge">
             <p>Arrastra aquí tus PDF o haz clic para seleccionarlos</p>
             <input type="file" id="fileInputMerge" accept=".pdf" multiple>
+        </div>
+
+        <!-- Selector de calidad -->
+        <div class="quality-options">
+            <label>
+                <input type="radio" name="mergeQuality" value="low" checked>
+                <span>Tamaño reducido</span>
+                <span class="quality-hint">(archivo más ligero, calidad aceptable)</span>
+            </label>
+            <label>
+                <input type="radio" name="mergeQuality" value="medium">
+                <span>Equilibrado</span>
+                <span class="quality-hint">(buena calidad/tamaño)</span>
+            </label>
+            <label>
+                <input type="radio" name="mergeQuality" value="high">
+                <span>Alta calidad</span>
+                <span class="quality-hint">(texto nítido, archivo más grande)</span>
+            </label>
         </div>
 
         <!-- Lista de archivos -->
@@ -59,14 +95,14 @@
     <script src="/js/common.js"></script>
     <script>
         // ============================================================
-        // MERGE (UNIR) - ALTA CALIDAD
+        // MERGE (UNIR) - CON OPCIÓN DE CALIDAD
         // ============================================================
         let mergeFiles = [];
         const fileListMerge = document.getElementById('fileListMerge');
         const fileCountMerge = document.getElementById('fileCountMerge');
         const mergeBtn = document.getElementById('mergeBtn');
 
-        // Sortable para reordenar
+        // Sortable
         new Sortable(fileListMerge, {
             animation: 150,
             ghostClass: 'sortable-ghost',
@@ -139,24 +175,33 @@
                 return;
             }
 
+            const qualityMode = document.querySelector('input[name="mergeQuality"]:checked').value;
+            let params = {};
+            switch (qualityMode) {
+                case 'low':
+                    params = { maxWidth: 1200, quality: 0.75, minDimension: 1000 };
+                    break;
+                case 'medium':
+                    params = { maxWidth: 1800, quality: 0.85, minDimension: 1400 };
+                    break;
+                case 'high':
+                    params = { maxWidth: 2500, quality: 0.92, minDimension: 1800 };
+                    break;
+                default:
+                    params = { maxWidth: 1500, quality: 0.82, minDimension: 1200 };
+            }
+
             mergeBtn.disabled = true;
             showLoading(true);
-            showStatus('mergeStatus', '⏳ Procesando páginas con alta resolución...');
+            showStatus('mergeStatus', '⏳ Procesando páginas...');
 
             try {
                 let allImages = [];
                 let totalPages = 0;
 
-                // Rasterizar cada archivo con parámetros de alta calidad
                 for (const file of mergeFiles) {
                     showStatus('mergeStatus', `⏳ Procesando ${file.name}...`);
-                    // Usamos alta resolución: ancho mínimo 2000px, calidad 0.95
-                    const images = await rasterizePdfToImages(file, {
-                        maxWidth: 3000,
-                        quality: 0.95,
-                        minDimension: 2000,
-                        usePNG: false
-                    });
+                    const images = await rasterizePdfToImages(file, params);
                     allImages = allImages.concat(images);
                     totalPages += images.length;
                 }
@@ -167,10 +212,9 @@
 
                 showStatus('mergeStatus', `⏳ Generando PDF combinado (${totalPages} páginas)...`);
 
-                // Usamos la ruta /compress para generar el PDF
                 await generatePdfFromImages(allImages, 'merged.pdf', 'merge');
 
-                showStatus('mergeStatus', '✅ PDF combinado correctamente (alta calidad)');
+                showStatus('mergeStatus', '✅ PDF combinado correctamente');
             } catch (err) {
                 showStatus('mergeStatus', '❌ ' + err.message, true);
                 console.error(err);
