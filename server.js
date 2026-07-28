@@ -5,17 +5,16 @@ const { PDFDocument } = require('pdf-lib');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// Configurar límite de payload para imágenes comprimidas (base64 grandes)
+// Configurar límite de payload para imágenes comprimidas
 app.use(express.json({ limit: '100mb' }));
 app.use(express.urlencoded({ limit: '100mb', extended: true }));
 
 const upload = multer({ storage: multer.memoryStorage() });
 
-// Servir archivos estáticos (HTML, CSS, JS) desde la carpeta 'public'
 app.use(express.static('public'));
 
-// ========== FUNCIÓN AUXILIAR ==========
-// Convierte rangos tipo "1-3,5" a un array de índices (base 0)
+// ========== FUNCIONES AUXILIARES ==========
+
 function parsePageRanges(rangesStr, totalPages) {
     if (!rangesStr || rangesStr.trim() === '') return [];
     const parts = rangesStr.split(',').map(s => s.trim());
@@ -35,7 +34,6 @@ function parsePageRanges(rangesStr, totalPages) {
     return Array.from(pageIndices).sort((a, b) => a - b);
 }
 
-// Crea un nuevo PDF a partir de un PDF original y un array de índices de páginas
 async function createPdfFromIndices(sourcePdf, indices) {
     const newPdf = await PDFDocument.create();
     const pages = await newPdf.copyPages(sourcePdf, indices);
@@ -43,27 +41,53 @@ async function createPdfFromIndices(sourcePdf, indices) {
     return await newPdf.save();
 }
 
-// ========== RUTA: UNIR ==========
+// ========== RUTA: UNIR (CON SOPORTE PARA ENCRIPTADOS) ==========
 app.post('/merge', upload.array('pdfs'), async (req, res) => {
     try {
         const files = req.files;
         if (!files || files.length === 0) {
             return res.status(400).send('No se subió ningún archivo PDF');
         }
+
         const mergedPdf = await PDFDocument.create();
+        const errores = [];
+
         for (const file of files) {
-            const pdf = await PDFDocument.load(file.buffer);
-            const indices = pdf.getPageIndices();
-            const copiedPages = await mergedPdf.copyPages(pdf, indices);
-            copiedPages.forEach(page => mergedPdf.addPage(page));
+            try {
+                const pdf = await PDFDocument.load(file.buffer, { 
+                    ignoreEncryption: true,
+                    updateMetadata: false
+                });
+                const indices = pdf.getPageIndices();
+                if (indices.length === 0) {
+                    errores.push(`El archivo "${file.originalname}" no tiene páginas.`);
+                    continue;
+                }
+                const copiedPages = await mergedPdf.copyPages(pdf, indices);
+                copiedPages.forEach(page => mergedPdf.addPage(page));
+            } catch (err) {
+                console.error(`Error al procesar ${file.originalname}:`, err.message);
+                errores.push(`Error al leer "${file.originalname}": ${err.message}`);
+            }
         }
+
+        if (errores.length > 0) {
+            if (mergedPdf.getPageCount() === 0) {
+                return res.status(400).send(`No se pudo procesar ningún PDF. Errores: ${errores.join('; ')}`);
+            }
+            console.warn('Advertencia: algunos PDFs no se pudieron fusionar:', errores);
+        }
+
         const pdfBytes = await mergedPdf.save();
         res.setHeader('Content-Type', 'application/pdf');
         res.setHeader('Content-Disposition', 'attachment; filename=merged.pdf');
+        if (errores.length > 0) {
+            res.setHeader('X-Warning', `Algunos archivos no se pudieron procesar: ${errores.join('; ')}`);
+        }
         res.send(Buffer.from(pdfBytes));
     } catch (error) {
-        console.error(error);
-        res.status(500).send('Error al fusionar PDFs');
+        console.error('Error general al fusionar:', error);
+        res.status(500).send(`Error al fusionar PDFs: ${error.message}`);
     }
 });
 
@@ -77,7 +101,6 @@ app.post('/split', upload.single('file'), async (req, res) => {
         const totalPages = pdf.getPageCount();
 
         if (mode === 'individual') {
-            // Pendiente de implementar (generar ZIP)
             return res.status(501).send('Dividir en páginas individuales requiere generar un ZIP. Pendiente de implementar.');
         }
 
@@ -172,7 +195,6 @@ app.post('/reorder-pages', upload.single('file'), async (req, res) => {
 });
 
 // ========== RUTA: COMPRIMIR PDF ==========
-// Recibe un array de imágenes en base64 (generadas en el navegador) y las empaqueta en un PDF
 app.post('/compress', async (req, res) => {
     try {
         const { images, level } = req.body;
