@@ -13,17 +13,18 @@ const execFileAsync = util.promisify(execFile);
 const app = express();
 const port = process.env.PORT || 3000;
 
+// Configuración de almacenamiento en memoria para Multer
 const storage = multer.memoryStorage();
 const upload = multer({ 
   storage: storage,
-  limits: { fileSize: 50 * 1024 * 1024 }
+  limits: { fileSize: 50 * 1024 * 1024 } // Límite de 50MB
 });
 
 app.use(express.static(path.join(__dirname, 'public')));
 app.use(express.json());
 
 /**
- * Desencripta y repara el PDF usando qpdf antes de procesarlo
+ * Desencripta y repara el PDF usando qpdf antes de procesarlo con pdf-lib
  */
 async function cleanPdfBuffer(inputBuffer) {
   const tempId = Date.now() + '_' + Math.random().toString(36).substring(2, 9);
@@ -128,7 +129,7 @@ app.post('/split', upload.any(), async (req, res) => {
         return res.status(400).json({ error: 'No se seleccionaron páginas válidas para dividir.' });
       }
 
-      // Si solo se selecciona una página, devuelve directamente un archivo PDF
+      // Si solo se selecciona 1 página, devuelve un PDF individual
       if (targetIndices.length === 1) {
         const singlePdf = await PDFDocument.create();
         const [copiedPage] = await singlePdf.copyPages(srcPdf, targetIndices);
@@ -140,7 +141,7 @@ app.post('/split', upload.any(), async (req, res) => {
         return res.send(Buffer.from(pdfBytes));
       }
 
-      // Si son varias páginas, crea un ZIP con los PDFs independientes
+      // Si se seleccionan varias páginas, las empaqueta en un archivo ZIP
       const zip = new JSZip();
 
       for (const idx of targetIndices) {
@@ -158,7 +159,7 @@ app.post('/split', upload.any(), async (req, res) => {
       return res.send(zipBuffer);
 
     } else {
-      // Modo Rangos: crea un único PDF recortado con las páginas especificadas
+      // Modo Rangos: genera un único PDF con la selección especificada
       const targetIndices = parsePageRanges(rangesStr, totalPages);
 
       if (targetIndices.length === 0) {
@@ -181,7 +182,57 @@ app.post('/split', upload.any(), async (req, res) => {
   }
 });
 
-// Middleware de errores global
+// ------------------------------------------------------------
+// RUTA: ELIMINAR PÁGINAS PDF
+// ------------------------------------------------------------
+app.post('/delete', upload.any(), async (req, res) => {
+  try {
+    if (!req.files || req.files.length === 0) {
+      return res.status(400).json({ error: 'No se ha subido ningún archivo PDF.' });
+    }
+
+    const file = req.files[0];
+    const pagesToDeleteStr = req.body.pagesToDelete || '';
+
+    const cleanedBuffer = await cleanPdfBuffer(file.buffer);
+    const srcPdf = await PDFDocument.load(cleanedBuffer, { ignoreEncryption: true });
+    const totalPages = srcPdf.getPageCount();
+
+    const toDeleteSet = new Set(
+      pagesToDeleteStr.split(',')
+        .map(num => parseInt(num.trim(), 10) - 1)
+        .filter(idx => !isNaN(idx) && idx >= 0 && idx < totalPages)
+    );
+
+    // Filtrar conservando únicamente las páginas NO marcadas para eliminar
+    const keepIndices = [];
+    for (let i = 0; i < totalPages; i++) {
+      if (!toDeleteSet.has(i)) {
+        keepIndices.push(i);
+      }
+    }
+
+    if (keepIndices.length === 0) {
+      return res.status(400).json({ error: 'No se pueden eliminar todas las páginas del documento.' });
+    }
+
+    const outputPdf = await PDFDocument.create();
+    const copiedPages = await outputPdf.copyPages(srcPdf, keepIndices);
+    copiedPages.forEach(page => outputPdf.addPage(page));
+
+    const pdfBytes = await outputPdf.save();
+
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', 'attachment; filename="pdf_modificado.pdf"');
+    res.send(Buffer.from(pdfBytes));
+
+  } catch (err) {
+    console.error('Error general en /delete:', err);
+    res.status(500).json({ error: 'Error al eliminar páginas del PDF.', details: err.message });
+  }
+});
+
+// Middleware global para manejo de errores de subida
 app.use((err, req, res, next) => {
   if (err instanceof multer.MulterError) {
     return res.status(400).json({ error: `Error en la subida: ${err.message}` });
@@ -191,6 +242,7 @@ app.use((err, req, res, next) => {
   next();
 });
 
+// Fallback para rutas no existentes
 app.use((req, res) => {
   res.status(404).json({ error: 'Ruta no encontrada' });
 });
