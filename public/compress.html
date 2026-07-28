@@ -4,20 +4,14 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Comprimir PDF - Suite PDF</title>
+    
+    <!-- Librería externa -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+    
+    <!-- Fuentes y estilos -->
     <link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,400;14..32,500;14..32,600;14..32,700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="/css/common.css">
     <style>
-        .back-link {
-            display: inline-block;
-            margin-bottom: 20px;
-            color: #ec9b59;
-            text-decoration: none;
-            font-weight: 500;
-        }
-        .back-link:hover {
-            text-decoration: underline;
-        }
         .options-container {
             margin-top: 24px;
             text-align: left;
@@ -64,14 +58,10 @@
 </head>
 <body>
 
-<div id="app-header"></div>
-    
+    <div id="app-header"></div>
 
     <div class="container">
-        <a href="/" class="back-link">← Volver al inicio</a>
-
         <header class="tool-header">
-            <img src="https://i.ibb.co/RTgVzm5q/Suite-PDF-removebg-preview.png" alt="Suite PDF">
             <h1>Comprimir PDF</h1>
             <p>Consigue que tu documento sea más liviano manteniendo la mejor calidad posible.</p>
         </header>
@@ -82,7 +72,7 @@
             <input type="file" id="fileInputCompress" accept=".pdf">
         </div>
 
-        <!-- Opciones de nivel de compresión (Sin porcentajes ni paréntesis) -->
+        <!-- Opciones de nivel de compresión -->
         <div class="options-container">
             <h3>Nivel de compresión</h3>
             <div class="radio-group">
@@ -122,11 +112,11 @@
         <div id="loading">⏳ Procesando... Por favor espera.</div>
     </div>
 
+    <div id="app-footer"></div>
+
+    <!-- Scripts modularizados -->
     <script src="/js/common.js"></script>
     <script src="/js/compress.js"></script>
-
-<div id="app-footer"></div>
-    
 
 </body>
 </html>
