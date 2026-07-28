@@ -1,10 +1,20 @@
 // ============================================================
-// COMPRESS LOGIC - REAJUSTE DE PARÁMETROS (12%, 45%, 95%)
+// COMPRESS LOGIC - CÁLCULO REAL DE TAMAÑOS Y PORCENTAJES
 // ============================================================
 let compressFile = null;
 const dropZoneCompress = document.getElementById('dropZoneCompress');
 const fileInputCompress = document.getElementById('fileInputCompress');
 const compressBtn = document.getElementById('compressBtn');
+
+// Función auxiliar para formatear bytes a KB o MB con 2 decimales
+function formatFileSize(bytes) {
+    if (bytes === 0) return '0 KB';
+    const k = 1024;
+    if (bytes < k * k) {
+        return (bytes / k).toFixed(2) + ' KB';
+    }
+    return (bytes / (k * k)).toFixed(2) + ' MB';
+}
 
 if (dropZoneCompress && fileInputCompress && compressBtn) {
 
@@ -79,10 +89,7 @@ if (dropZoneCompress && fileInputCompress && compressBtn) {
             const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
             const totalPages = pdf.numPages;
 
-            // Parámetros recalibrados para 12%, 45% y 95%:
-            // Extreme: maxDimension 520px / quality 0.18 -> Bajar al ~12%
-            // Recommended: maxDimension 1500px / quality 0.72 -> Subir al ~45%
-            // Low: maxDimension 2400px / quality 0.92 -> Subir al ~95%
+            // Parámetros calibrados para 12%, 45% y 95%
             let maxDimension, quality;
             switch (level) {
                 case 'extreme': 
@@ -111,7 +118,6 @@ if (dropZoneCompress && fileInputCompress && compressBtn) {
                 
                 const page = await pdf.getPage(i);
                 
-                // Cálculo de escala acelerado
                 const unscaledViewport = page.getViewport({ scale: 1.0 });
                 const currentMax = Math.max(unscaledViewport.width, unscaledViewport.height);
                 
@@ -131,7 +137,6 @@ if (dropZoneCompress && fileInputCompress && compressBtn) {
 
                 await page.render({ canvasContext: ctx, viewport }).promise;
 
-                // Extracción ultrarrápida JPEG
                 const dataUrl = canvas.toDataURL('image/jpeg', quality);
                 images.push(dataUrl);
             }
@@ -140,7 +145,7 @@ if (dropZoneCompress && fileInputCompress && compressBtn) {
                 showStatus('compressStatus', '⏳ Reconstruyendo documento PDF...');
             }
 
-            // Envío ligero al backend
+            // Envío al backend
             const resp = await fetch('/compress', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -153,7 +158,24 @@ if (dropZoneCompress && fileInputCompress && compressBtn) {
             }
 
             const blob = await resp.blob();
-            
+
+            // ============================================================
+            // CÁLCULO DE TAMAÑOS Y PORCENTAJE REAL
+            // ============================================================
+            const originalSizeBytes = compressFile.size;
+            const compressedSizeBytes = blob.size;
+
+            const originalFormatted = formatFileSize(originalSizeBytes);
+            const compressedFormatted = formatFileSize(compressedSizeBytes);
+
+            let percentReduced = 0;
+            if (originalSizeBytes > 0) {
+                percentReduced = Math.round(((originalSizeBytes - compressedSizeBytes) / originalSizeBytes) * 100);
+            }
+            // Asegurar que no sea negativo si por algún motivo excepcional el peso aumentara
+            if (percentReduced < 0) percentReduced = 0;
+
+            // Descargar el archivo procesado
             if (typeof downloadFile === 'function') {
                 downloadFile(blob, `comprimido_${level}_${compressFile.name}`);
             } else {
@@ -167,8 +189,11 @@ if (dropZoneCompress && fileInputCompress && compressBtn) {
                 window.URL.revokeObjectURL(url);
             }
 
+            // Mensaje enriquecido con los datos reales
+            const successMessage = `✅ PDF comprimido correctamente. ¡Tus PDF ahora pesan un ${percentReduced}% menos! de ${originalFormatted} a ${compressedFormatted}`;
+
             if (typeof showStatus === 'function') {
-                showStatus('compressStatus', '✅ PDF comprimido correctamente');
+                showStatus('compressStatus', successMessage);
             }
         } catch (err) {
             if (typeof showStatus === 'function') {
