@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Dividir PDF - SuitePDF</title>
   
-  <!-- CSS global y específico -->
+  <!-- Hojas de estilo -->
   <link rel="stylesheet" href="/css/common.css">
   <link rel="stylesheet" href="/css/split.css">
   
@@ -32,29 +32,29 @@
         </label>
       </section>
 
-      <!-- Panel de trabajo (oculto por defecto hasta adjuntar el PDF) -->
+      <!-- Panel de trabajo -->
       <section class="workspace-section" id="workspace" style="display: none;">
         <div class="file-info">
-          <span id="fileName">documento.pdf</span>
-          <button id="btnRemoveFile" class="btn-danger-sm">Cambiar PDF</button>
+          <span id="fileName" class="file-name">documento.pdf</span>
+          <button id="btnRemoveFile" class="btn-secondary-sm">Cambiar PDF</button>
         </div>
 
         <div class="split-options">
           <h3>Modo de división</h3>
           <div class="radio-group">
-            <label>
+            <label class="radio-label">
               <input type="radio" name="splitMode" value="single" checked>
-              Dividir en páginas individuales
+              <span>Dividir en páginas individuales</span>
             </label>
-            <label>
+            <label class="radio-label">
               <input type="radio" name="splitMode" value="range">
-              Dividir por rango de páginas
+              <span>Dividir por rango de páginas</span>
             </label>
           </div>
 
-          <div id="rangeInputContainer" style="display: none; margin-top: 15px;">
+          <div id="rangeInputContainer" class="range-container" style="display: none;">
             <label for="pageRanges">Especifica los rangos (Ejemplo: 1-3, 5, 8-10):</label>
-            <input type="text" id="pageRanges" placeholder="e.g. 1-2, 4" class="input-text">
+            <input type="text" id="pageRanges" placeholder="ej. 1-3, 5" class="input-text">
           </div>
         </div>
 
