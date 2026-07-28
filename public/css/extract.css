@@ -1,0 +1,63 @@
+/* Enlace de regreso al inicio */
+.back-link {
+    display: inline-block;
+    margin-bottom: 12px;
+    color: #4b5563;
+    text-decoration: none;
+    font-size: 0.9rem;
+    font-weight: 500;
+}
+
+.back-link:hover {
+    color: #111827;
+    text-decoration: underline;
+}
+
+/* Tarjeta de página para extraer */
+.page-card-extract {
+    border: 2px solid #e5e7eb;
+    border-radius: 8px;
+    padding: 8px;
+    background: #fff;
+    cursor: pointer;
+    text-align: center;
+    transition: all 0.2s ease;
+    position: relative;
+}
+
+.page-card-extract:hover {
+    border-color: #3b82f6;
+}
+
+/* Marca visual de las páginas marcadas PARA EXTRAER */
+.page-card-extract.to-extract {
+    border-color: #2563eb;
+    background-color: #eff6ff;
+}
+
+.page-card-extract.to-extract::after {
+    content: "✓ Extraer";
+    position: absolute;
+    top: 6px;
+    right: 6px;
+    background: #2563eb;
+    color: #ffffff;
+    font-size: 0.7rem;
+    font-weight: bold;
+    padding: 2px 6px;
+    border-radius: 4px;
+}
+
+.page-card-extract canvas {
+    max-width: 100%;
+    height: auto;
+    border-radius: 4px;
+    display: block;
+    margin: 0 auto 6px auto;
+}
+
+.page-card-extract span {
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: #374151;
+}
