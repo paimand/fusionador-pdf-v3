@@ -1,7 +1,7 @@
 {
   "name": "suitepdf",
   "version": "1.0.0",
-  "description": "Herramienta de manipulación de PDF",
+  "description": "Suite de edición de PDF",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"
