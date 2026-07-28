@@ -1,77 +1,241 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Dividir PDF - SuitePDF</title>
-  
-  <!-- Hojas de estilo -->
-  <link rel="stylesheet" href="/css/common.css">
-  <link rel="stylesheet" href="/css/split.css">
-  
-  <!-- PDF.js para renderizado de miniaturas -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dividir PDF - Suite PDF</title>
+    <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,400;14..32,500;14..32,600;14..32,700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="css/common.css">
+    <style>
+        /* Estilos complementarios respetando la estética de common.css */
+        .back-link {
+            display: inline-block;
+            margin-bottom: 12px;
+            color: #4b5563;
+            text-decoration: none;
+            font-size: 0.9rem;
+            font-weight: 500;
+        }
+        .back-link:hover {
+            color: #111827;
+            text-decoration: underline;
+        }
+        .page-card {
+            border: 2px solid #e5e7eb;
+            border-radius: 8px;
+            padding: 8px;
+            background: #fff;
+            cursor: pointer;
+            text-align: center;
+            transition: all 0.2s ease;
+            position: relative;
+        }
+        .page-card.selected {
+            border-color: #2563eb;
+            background-color: #eff6ff;
+        }
+        .page-card canvas {
+            max-width: 100%;
+            height: auto;
+            border-radius: 4px;
+            display: block;
+            margin: 0 auto 6px auto;
+        }
+        .page-card span {
+            font-size: 0.8rem;
+            font-weight: 600;
+            color: #374151;
+        }
+    </style>
 </head>
 <body>
-  <div class="container">
-    <header class="header">
-      <div class="top-nav">
-        <a href="/" class="btn-back">← Volver al inicio</a>
-      </div>
-      <h1>Dividir PDF</h1>
-      <p>Extrae páginas o divide tu documento en archivos independientes.</p>
-    </header>
+    <div class="container">
+        <a href="index.html" class="back-link">← Volver al inicio</a>
 
-    <main class="main-content">
-      <!-- Zona de subida de archivos -->
-      <section class="upload-section" id="uploadArea">
-        <input type="file" id="fileInput" accept="application/pdf" hidden />
-        <label for="fileInput" class="drop-zone">
-          <div class="icon">📄</div>
-          <p>Haz clic o arrastra un archivo PDF aquí</p>
-        </label>
-      </section>
+        <header class="tool-header">
+            <a href="index.html" style="text-decoration:none; color:inherit;">
+                <img src="https://i.ibb.co/RTgVzm5q/Suite-PDF-removebg-preview.png" alt="Suite PDF">
+            </a>
+            <p>Divide un PDF en partes seleccionando páginas o rangos.</p>
+        </header>
 
-      <!-- Panel de trabajo -->
-      <section class="workspace-section" id="workspace" style="display: none;">
-        <div class="file-info">
-          <span id="fileName" class="file-name">documento.pdf</span>
-          <button id="btnRemoveFile" class="btn-secondary-sm">Cambiar PDF</button>
+        <div class="upload-area" id="dropZoneSplit">
+            <p>Arrastra o selecciona un PDF para dividir</p>
+            <input type="file" id="fileInputSplit" accept=".pdf">
         </div>
 
-        <div class="split-options">
-          <h3>Modo de división</h3>
-          <div class="radio-group">
-            <label class="radio-label">
-              <input type="radio" name="splitMode" value="single" checked>
-              <span>Dividir en páginas individuales</span>
+        <div style="margin: 16px 0;">
+            <label>
+                <input type="radio" name="splitMode" value="individual" checked> Dividir en páginas individuales
             </label>
-            <label class="radio-label">
-              <input type="radio" name="splitMode" value="range">
-              <span>Dividir por rango de páginas</span>
+            <label style="margin-left: 20px;">
+                <input type="radio" name="splitMode" value="ranges"> Dividir por rangos
             </label>
-          </div>
-
-          <div id="rangeInputContainer" class="range-container" style="display: none;">
-            <label for="pageRanges">Especifica los rangos (Ejemplo: 1-3, 5, 8-10):</label>
-            <input type="text" id="pageRanges" placeholder="ej. 1-3, 5" class="input-text">
-          </div>
         </div>
 
-        <!-- Vista previa y contenedor de miniaturas -->
-        <div class="preview-container">
-          <h3>Páginas del documento</h3>
-          <div id="thumbnailsGrid" class="thumbnails-grid"></div>
+        <div id="splitPreview" style="display:none; margin-bottom:16px;">
+            <div class="grid-controls" style="margin-bottom: 12px;">
+                <button id="splitSelectAll" class="btn btn-secondary" style="padding:6px 14px;">Seleccionar todas</button>
+                <button id="splitDeselectAll" class="btn btn-secondary" style="padding:6px 14px;">Deseleccionar todas</button>
+            </div>
+            <div id="splitPageGrid" class="page-grid"></div>
+        </div>
+
+        <div id="splitRangesContainer" style="display:none; margin-bottom:16px;">
+            <label for="splitRanges">Rangos (ej. 1,3-5,7):</label>
+            <input type="text" id="splitRanges" placeholder="Ej: 1,3-5,7" style="width:100%;padding:8px;border:1px solid #ccc;border-radius:6px;margin-top:6px;">
         </div>
 
         <div class="actions">
-          <button id="btnProcessSplit" class="btn-primary">Dividir PDF</button>
+            <button id="splitBtn" class="btn btn-primary">Dividir</button>
         </div>
-      </section>
-    </main>
-  </div>
+        <div id="splitStatus" style="margin-top:12px;"></div>
+        <div id="loading" style="display:none;">⏳ Procesando...</div>
+    </div>
 
-  <script src="/js/common.js"></script>
-  <script src="/js/split.js"></script>
+    <script src="js/common.js"></script>
+    <script>
+        // Configuración de worker para PDF.js
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+        let splitFile = null;
+        let splitSelections = [];
+        const splitBtn = document.getElementById('splitBtn');
+        const splitRangesInput = document.getElementById('splitRanges');
+        const splitRangesContainer = document.getElementById('splitRangesContainer');
+        const splitPreview = document.getElementById('splitPreview');
+        const gridContainer = document.getElementById('splitPageGrid');
+
+        // Control de los modos de división
+        document.querySelectorAll('input[name="splitMode"]').forEach(radio => {
+            radio.addEventListener('change', () => {
+                const isRanges = radio.value === 'ranges';
+                splitRangesContainer.style.display = isRanges ? 'block' : 'none';
+                splitPreview.style.display = (isRanges || !splitFile) ? 'none' : 'block';
+            });
+        });
+
+        // Evento de selección de archivo
+        setupDropZone('dropZoneSplit', 'fileInputSplit', files => {
+            if (files && files[0]) {
+                splitFile = files[0];
+                document.querySelector('#dropZoneSplit p').textContent = `📄 ${splitFile.name}`;
+                loadAndRenderPdf(splitFile);
+            }
+        });
+
+        // Función para procesar el PDF y generar las miniaturas
+        async function loadAndRenderPdf(file) {
+            gridContainer.innerHTML = '<p style="font-size:0.9rem; color:#6b7280;">Cargando miniaturas...</p>';
+            splitPreview.style.display = 'block';
+
+            try {
+                const arrayBuffer = await file.arrayBuffer();
+                const pdfDoc = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+                const numPages = pdfDoc.numPages;
+
+                splitSelections = new Array(numPages).fill(true); // Seleccionadas por defecto
+                gridContainer.innerHTML = '';
+
+                for (let i = 1; i <= numPages; i++) {
+                    const page = await pdfDoc.getPage(i);
+                    const viewport = page.getViewport({ scale: 0.25 });
+
+                    const card = document.createElement('div');
+                    card.className = 'page-card selected';
+                    card.dataset.pageIndex = i - 1;
+
+                    const canvas = document.createElement('canvas');
+                    const ctx = canvas.getContext('2d');
+                    canvas.height = viewport.height;
+                    canvas.width = viewport.width;
+
+                    await page.render({ canvasContext: ctx, viewport: viewport }).promise;
+
+                    const label = document.createElement('span');
+                    label.textContent = `Pág. ${i}`;
+
+                    card.appendChild(canvas);
+                    card.appendChild(label);
+
+                    // Alternar selección al hacer clic en la miniatura
+                    card.addEventListener('click', () => {
+                        const idx = parseInt(card.dataset.pageIndex);
+                        splitSelections[idx] = !splitSelections[idx];
+                        card.classList.toggle('selected', splitSelections[idx]);
+                    });
+
+                    gridContainer.appendChild(card);
+                }
+            } catch (err) {
+                console.error('Error al generar miniaturas:', err);
+                gridContainer.innerHTML = '<p style="color:red;">Error al cargar las miniaturas del PDF.</p>';
+            }
+        }
+
+        // Botones de selección masiva
+        document.getElementById('splitSelectAll').addEventListener('click', () => {
+            splitSelections.fill(true);
+            document.querySelectorAll('.page-card').forEach(card => card.classList.add('selected'));
+        });
+
+        document.getElementById('splitDeselectAll').addEventListener('click', () => {
+            splitSelections.fill(false);
+            document.querySelectorAll('.page-card').forEach(card => card.classList.remove('selected'));
+        });
+
+        // Envío de la petición
+        splitBtn.addEventListener('click', async () => {
+            if (!splitFile) { alert('Primero selecciona un PDF'); return; }
+            const mode = document.querySelector('input[name="splitMode"]:checked').value;
+            let pagesToSend = '';
+            
+            if (mode === 'individual') {
+                const selectedIndices = splitSelections.map((sel, idx) => sel ? idx + 1 : null).filter(v => v !== null);
+                if (selectedIndices.length === 0) { alert('Selecciona al menos una página'); return; }
+                pagesToSend = selectedIndices.join(',');
+            } else {
+                pagesToSend = splitRangesInput.value.trim();
+                if (!pagesToSend) { alert('Introduce rangos válidos'); return; }
+            }
+            
+            splitBtn.disabled = true;
+            if (typeof showLoading === 'function') showLoading(true);
+            
+            try {
+                const formData = new FormData();
+                formData.append('file', splitFile);
+                formData.append('mode', mode);
+                formData.append('ranges', pagesToSend);
+                
+                const resp = await fetch('/split', { method: 'POST', body: formData });
+                if (!resp.ok) throw new Error(await resp.text());
+                
+                if (typeof downloadFile === 'function') {
+                    downloadFile(await resp.blob(), 'split.pdf');
+                } else {
+                    const blob = await resp.blob();
+                    const url = window.URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = 'pdf_dividido.pdf';
+                    a.click();
+                }
+                
+                if (typeof showStatus === 'function') showStatus('splitStatus', '✅ División completada');
+            } catch (err) {
+                if (typeof showStatus === 'function') {
+                    showStatus('splitStatus', '❌ ' + err.message, true);
+                } else {
+                    alert('Error: ' + err.message);
+                }
+            } finally {
+                splitBtn.disabled = false;
+                if (typeof showLoading === 'function') showLoading(false);
+            }
+        });
+    </script>
 </body>
 </html>
