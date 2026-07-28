@@ -1,4 +1,12 @@
 // ============================================================
+// CONFIGURACIÓN GLOBAL
+// ============================================================
+if (typeof pdfjsLib !== 'undefined') {
+    pdfjsLib.GlobalWorkerOptions.workerSrc =
+        'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+}
+
+// ============================================================
 // INYECCIÓN DINÁMICA DE HEADER Y FOOTER COMUNES
 // ============================================================
 document.addEventListener('DOMContentLoaded', () => {
@@ -10,22 +18,78 @@ function injectHeader() {
     const headerContainer = document.getElementById('app-header');
     if (!headerContainer) return;
 
-    // Detectar en qué página estamos para resaltar el enlace activo
     const currentPath = window.location.pathname;
 
     headerContainer.innerHTML = `
-        <a href="/" class="back-link">← Volver al inicio</a>
-        <header class="tool-header">
-            <a href="/">
-                <img src="https://i.ibb.co/RTgVzm5q/Suite-PDF-removebg-preview.png" alt="Suite PDF" class="site-logo">
-            </a>
-            <nav class="main-nav">
-                <a href="/merge.html" class="nav-item ${currentPath.includes('merge') ? 'active' : ''}">Unir PDF</a>
-                <a href="/split.html" class="nav-item ${currentPath.includes('split') ? 'active' : ''}">Dividir PDF</a>
-                <a href="/compress.html" class="nav-item ${currentPath.includes('compress') ? 'active' : ''}">Comprimir PDF</a>
-            </nav>
+        <header class="navbar-ilove">
+            <div class="navbar-container">
+                <!-- LOGO CORPORATIVO -->
+                <a href="/" class="navbar-brand">
+                    <img src="https://i.ibb.co/RTgVzm5q/Suite-PDF-removebg-preview.png" alt="Suite PDF" class="brand-logo">
+                </a>
+
+                <!-- NAVEGACIÓN PRINCIPAL -->
+                <nav class="navbar-nav">
+                    <a href="/merge.html" class="nav-link ${currentPath.includes('merge') ? 'active' : ''}">UNIR PDF</a>
+                    <a href="/split.html" class="nav-link ${currentPath.includes('split') ? 'active' : ''}">DIVIDIR PDF</a>
+                    <a href="/compress.html" class="nav-link ${currentPath.includes('compress') ? 'active' : ''}">COMPRIMIR PDF</a>
+
+                    <!-- MENÚ DESPLEGABLE: TODAS LAS HERRAMIENTAS -->
+                    <div class="dropdown">
+                        <button class="dropdown-toggle" id="toolsDropdownBtn" type="button">
+                            TODAS LAS HERRAMIENTAS PDF
+                            <span class="dropdown-arrow">▼</span>
+                        </button>
+                        <div class="dropdown-menu" id="toolsDropdownMenu">
+                            <a href="/merge.html" class="dropdown-item">
+                                <span class="icon">🧩</span>
+                                <div class="item-text">
+                                    <strong>Unir PDF</strong>
+                                    <small>Combina múltiples archivos en uno solo</small>
+                                </div>
+                            </a>
+                            <a href="/split.html" class="dropdown-item">
+                                <span class="icon">✂️</span>
+                                <div class="item-text">
+                                    <strong>Dividir PDF</strong>
+                                    <small>Separa páginas o extrae rangos</small>
+                                </div>
+                            </a>
+                            <a href="/compress.html" class="dropdown-item">
+                                <span class="icon">🗜️</span>
+                                <div class="item-text">
+                                    <strong>Comprimir PDF</strong>
+                                    <small>Reduce el peso de tus archivos</small>
+                                </div>
+                            </a>
+                            <a href="/delete.html" class="dropdown-item">
+                                <span class="icon">🗑️</span>
+                                <div class="item-text">
+                                    <strong>Eliminar páginas</strong>
+                                    <small>Quita páginas innecesarias de tu PDF</small>
+                                </div>
+                            </a>
+                        </div>
+                    </div>
+                </nav>
+            </div>
         </header>
     `;
+
+    // Soporte para apertura por clic (móviles/táctil) y cierre exterior
+    const dropdownBtn = document.getElementById('toolsDropdownBtn');
+    const dropdownMenu = document.getElementById('toolsDropdownMenu');
+
+    if (dropdownBtn && dropdownMenu) {
+        dropdownBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            dropdownMenu.classList.toggle('show');
+        });
+
+        document.addEventListener('click', () => {
+            dropdownMenu.classList.remove('show');
+        });
+    }
 }
 
 function injectFooter() {
@@ -40,8 +104,17 @@ function injectFooter() {
 }
 
 // ============================================================
-// FUNCIONES UTILITARIAS COMUNES (MANTENER LO EXISTENTE)
+// FUNCIONES AUXILIARES Y UTILITARIAS
 // ============================================================
+function readFileAsArrayBuffer(file) {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = (e) => resolve(e.target.result);
+        reader.onerror = (e) => reject(e.target.error);
+        reader.readAsArrayBuffer(file);
+    });
+}
+
 function showLoading(show) {
     const el = document.getElementById('loading');
     if (el) el.style.display = show ? 'block' : 'none';
@@ -66,6 +139,9 @@ function downloadFile(blob, filename) {
     window.URL.revokeObjectURL(url);
 }
 
+// ============================================================
+// SETUP DRAG & DROP
+// ============================================================
 function setupDropZone(dropZoneId, inputId, onFilesSelected) {
     const dropZone = document.getElementById(dropZoneId);
     const input = document.getElementById(inputId);
@@ -88,96 +164,15 @@ function setupDropZone(dropZoneId, inputId, onFilesSelected) {
 
     dropZone.addEventListener('drop', e => {
         const files = e.dataTransfer.files;
-        if (files && files.length > 0) onFilesSelected(files);
+        if (files && files.length > 0) {
+            input.files = files;
+            onFilesSelected(files);
+        }
     });
 
     dropZone.addEventListener('click', () => input.click());
 
     input.addEventListener('change', e => {
-        if (e.target.files.length > 0) onFilesSelected(e.target.files);
-    });
-}
-
-async function renderThumbnail(file, canvas) {
-    try {
-        const arrayBuffer = await file.arrayBuffer();
-        const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
-        const page = await pdf.getPage(1);
-        const viewport = page.getViewport({ scale: 0.2 });
-        const ctx = canvas.getContext('2d');
-        canvas.width = viewport.width;
-        canvas.height = viewport.height;
-        await page.render({ canvasContext: ctx, viewport }).promise;
-    } catch (e) {
-        console.error('Error renderizando miniatura:', e);
-    }
-}
-
-// ============================================================
-// CONFIGURACIÓN GLOBAL
-// ============================================================
-pdfjsLib.GlobalWorkerOptions.workerSrc =
-    'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
-
-// ============================================================
-// FUNCIONES AUXILIARES
-// ============================================================
-function readFileAsArrayBuffer(file) {
-    return new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = (e) => resolve(e.target.result);
-        reader.onerror = (e) => reject(e.target.error);
-        reader.readAsArrayBuffer(file);
-    });
-}
-
-function showLoading(show) {
-    const el = document.getElementById('loading');
-    if (el) el.style.display = show ? 'block' : 'none';
-}
-
-function showStatus(elementId, message, isError = false) {
-    const el = document.getElementById(elementId);
-    if (el) {
-        el.textContent = message;
-        el.style.color = isError ? '#d32f2f' : '#1d1d1f';
-    }
-}
-
-function downloadFile(blob, filename) {
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = filename;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-}
-
-// ============================================================
-// SETUP DRAG & DROP
-// ============================================================
-function setupDropZone(zoneId, inputId, onFilesSelected) {
-    const dropZone = document.getElementById(zoneId);
-    const fileInput = document.getElementById(inputId);
-    if (!dropZone || !fileInput) return;
-
-    dropZone.addEventListener('dragover', e => {
-        e.preventDefault();
-        dropZone.classList.add('dragover');
-    });
-    dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragover'));
-    dropZone.addEventListener('drop', e => {
-        e.preventDefault();
-        dropZone.classList.remove('dragover');
-        if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-            fileInput.files = e.dataTransfer.files;
-            onFilesSelected(e.dataTransfer.files);
-        }
-    });
-    dropZone.addEventListener('click', () => fileInput.click());
-    fileInput.addEventListener('change', e => {
         if (e.target.files && e.target.files.length > 0) {
             onFilesSelected(e.target.files);
         }
@@ -192,11 +187,10 @@ async function renderThumbnail(file, canvas, pageNum = 1) {
         const arrayBuffer = await readFileAsArrayBuffer(file);
         const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
         const page = await pdf.getPage(pageNum);
-        const scale = 0.5;
-        const viewport = page.getViewport({ scale });
+        const viewport = page.getViewport({ scale: 0.5 });
+        const ctx = canvas.getContext('2d');
         canvas.width = viewport.width;
         canvas.height = viewport.height;
-        const ctx = canvas.getContext('2d');
         await page.render({ canvasContext: ctx, viewport }).promise;
     } catch (_) {
         const ctx = canvas.getContext('2d');
