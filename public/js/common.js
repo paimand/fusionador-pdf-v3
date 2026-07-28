@@ -1,5 +1,5 @@
 // ============================================================
-// CONFIGURACIÓN GLOBAL DE PDF.JS
+// CONFIGURACIÓN GLOBAL
 // ============================================================
 pdfjsLib.GlobalWorkerOptions.workerSrc =
     'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
@@ -7,8 +7,6 @@ pdfjsLib.GlobalWorkerOptions.workerSrc =
 // ============================================================
 // FUNCIONES AUXILIARES
 // ============================================================
-
-// Lee un archivo como ArrayBuffer
 function readFileAsArrayBuffer(file) {
     return new Promise((resolve, reject) => {
         const reader = new FileReader();
@@ -18,13 +16,11 @@ function readFileAsArrayBuffer(file) {
     });
 }
 
-// Muestra u oculta el indicador de carga
 function showLoading(show) {
     const el = document.getElementById('loading');
     if (el) el.style.display = show ? 'block' : 'none';
 }
 
-// Muestra un mensaje de estado en un elemento
 function showStatus(elementId, message, isError = false) {
     const el = document.getElementById(elementId);
     if (el) {
@@ -33,7 +29,6 @@ function showStatus(elementId, message, isError = false) {
     }
 }
 
-// Descarga un blob en el navegador
 function downloadFile(blob, filename) {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -45,7 +40,9 @@ function downloadFile(blob, filename) {
     URL.revokeObjectURL(url);
 }
 
-// Configura una zona de drop (arrastrar y soltar)
+// ============================================================
+// SETUP DRAG & DROP
+// ============================================================
 function setupDropZone(zoneId, inputId, onFilesSelected) {
     const dropZone = document.getElementById(zoneId);
     const fileInput = document.getElementById(inputId);
@@ -55,9 +52,7 @@ function setupDropZone(zoneId, inputId, onFilesSelected) {
         e.preventDefault();
         dropZone.classList.add('dragover');
     });
-    dropZone.addEventListener('dragleave', () => {
-        dropZone.classList.remove('dragover');
-    });
+    dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragover'));
     dropZone.addEventListener('drop', e => {
         e.preventDefault();
         dropZone.classList.remove('dragover');
@@ -75,10 +70,8 @@ function setupDropZone(zoneId, inputId, onFilesSelected) {
 }
 
 // ============================================================
-// RENDERIZADO DE MINIATURAS
+// RENDERIZAR MINIATURA (para listas)
 // ============================================================
-
-// Genera una miniatura de la primera página de un PDF en un canvas
 async function renderThumbnail(file, canvas, pageNum = 1) {
     try {
         const arrayBuffer = await readFileAsArrayBuffer(file);
@@ -103,11 +96,16 @@ async function renderThumbnail(file, canvas, pageNum = 1) {
 }
 
 // ============================================================
-// RASTERIZAR PDF A IMÁGENES (para compresión y unión)
+// RASTERIZAR PDF A IMÁGENES (ALTA CALIDAD PARA TEXTOS)
 // ============================================================
+async function rasterizePdfToImages(file, options = {}) {
+    const {
+        maxWidth = 2500,        // Ancho máximo en píxeles (alto para texto nítido)
+        quality = 0.92,         // Calidad JPEG (0-1), 0.92 es un buen equilibrio
+        usePNG = false,         // Si es true, usa PNG (sin pérdida) pero archivos más pesados
+        minDimension = 2000     // Si la página es más pequeña, se escala a este ancho mínimo
+    } = options;
 
-// Convierte un PDF en un array de imágenes en base64 (JPEG)
-async function rasterizePdfToImages(file, maxDimension = 1200, quality = 0.8) {
     const arrayBuffer = await readFileAsArrayBuffer(file);
     const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
     const totalPages = pdf.numPages;
@@ -116,149 +114,50 @@ async function rasterizePdfToImages(file, maxDimension = 1200, quality = 0.8) {
     for (let i = 1; i <= totalPages; i++) {
         const page = await pdf.getPage(i);
         const viewport = page.getViewport({ scale: 1.0 });
-        const currentMax = Math.max(viewport.width, viewport.height);
+        let width = viewport.width;
+        let height = viewport.height;
+
+        // Escalar manteniendo proporción para que el ancho sea al menos minDimension
+        // y como máximo maxWidth
         let scale = 1.0;
-        if (currentMax > maxDimension) {
-            scale = maxDimension / currentMax;
+        if (width < minDimension) {
+            scale = minDimension / width;
+        } else if (width > maxWidth) {
+            scale = maxWidth / width;
         }
+        // Si el ancho ya está en el rango, scale = 1.0
+
         const scaledViewport = page.getViewport({ scale });
         const canvas = document.createElement('canvas');
         canvas.width = Math.floor(scaledViewport.width);
         canvas.height = Math.floor(scaledViewport.height);
         const ctx = canvas.getContext('2d');
+        // Fondo blanco para evitar transparencias
         ctx.fillStyle = '#ffffff';
         ctx.fillRect(0, 0, canvas.width, canvas.height);
         await page.render({ canvasContext: ctx, viewport: scaledViewport }).promise;
-        images.push(canvas.toDataURL('image/jpeg', quality));
+
+        let imageData;
+        if (usePNG) {
+            imageData = canvas.toDataURL('image/png');
+        } else {
+            imageData = canvas.toDataURL('image/jpeg', quality);
+        }
+        images.push(imageData);
     }
     return images;
 }
 
 // ============================================================
-// VISTA PREVIA DE PÁGINAS CON SELECCIÓN (Split, Delete, Extract)
+// FUNCIÓN PARA GENERAR PDF DESDE IMÁGENES (usando /compress)
 // ============================================================
-
-// Renderiza un grid de páginas seleccionables (para split, delete, extract)
-async function renderPageGrid(file, gridId, selectionsArray) {
-    const grid = document.getElementById(gridId);
-    if (!grid) return;
-    grid.innerHTML = '';
-    try {
-        const arrayBuffer = await readFileAsArrayBuffer(file);
-        const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
-        const totalPages = pdf.numPages;
-
-        if (selectionsArray.length !== totalPages) {
-            selectionsArray.length = 0;
-            for (let i = 0; i < totalPages; i++) selectionsArray.push(false);
-        }
-
-        for (let i = 0; i < totalPages; i++) {
-            const pageNum = i + 1;
-            const div = document.createElement('div');
-            div.className = 'page-item';
-            div.dataset.index = i;
-
-            const canvas = document.createElement('canvas');
-            div.appendChild(canvas);
-
-            const overlay = document.createElement('div');
-            overlay.className = 'check-overlay';
-            overlay.textContent = '✓';
-            div.appendChild(overlay);
-
-            const label = document.createElement('div');
-            label.className = 'page-number';
-            label.textContent = `Pág. ${pageNum}`;
-            div.appendChild(label);
-
-            const updateStyle = () => div.classList.toggle('selected', selectionsArray[i]);
-
-            div.addEventListener('click', () => {
-                selectionsArray[i] = !selectionsArray[i];
-                updateStyle();
-            });
-
-            grid.appendChild(div);
-            updateStyle();
-
-            try {
-                const page = await pdf.getPage(pageNum);
-                const scale = 0.3;
-                const viewport = page.getViewport({ scale });
-                canvas.width = viewport.width;
-                canvas.height = viewport.height;
-                const ctx = canvas.getContext('2d');
-                await page.render({ canvasContext: ctx, viewport }).promise;
-            } catch (_) {
-                const ctx = canvas.getContext('2d');
-                ctx.fillStyle = '#f0f0f2';
-                ctx.fillRect(0, 0, canvas.width || 120, canvas.height || 160);
-                ctx.fillStyle = '#86868b';
-                ctx.font = '12px sans-serif';
-                ctx.textAlign = 'center';
-                ctx.textBaseline = 'middle';
-                ctx.fillText('Pág. ' + pageNum, (canvas.width || 120) / 2, (canvas.height || 160) / 2);
-            }
-        }
-
-        const previewId = gridId.replace('PageGrid', 'Preview');
-        const previewEl = document.getElementById(previewId);
-        if (previewEl) previewEl.style.display = 'block';
-
-    } catch (err) {
-        alert('Error al cargar las páginas: ' + err.message);
-    }
-}
-
-// ============================================================
-// CARGA DE PÁGINAS PARA REORDER (con arrastre)
-// ============================================================
-
-// Carga las páginas de un PDF en el grid de reordenar
-async function loadReorderPages(file, pageListElement) {
-    try {
-        const arrayBuffer = await readFileAsArrayBuffer(file);
-        const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
-        const totalPages = pdf.numPages;
-        pageListElement.innerHTML = '';
-
-        for (let i = 1; i <= totalPages; i++) {
-            const li = document.createElement('li');
-            li.className = 'reorder-item';
-            li.dataset.page = i;
-
-            const canvas = document.createElement('canvas');
-            canvas.style.pointerEvents = 'none';
-            li.appendChild(canvas);
-
-            const label = document.createElement('div');
-            label.className = 'page-number';
-            label.textContent = `Pág. ${i}`;
-            li.appendChild(label);
-
-            pageListElement.appendChild(li);
-
-            try {
-                const page = await pdf.getPage(i);
-                const scale = 0.3;
-                const viewport = page.getViewport({ scale });
-                canvas.width = viewport.width;
-                canvas.height = viewport.height;
-                const ctx = canvas.getContext('2d');
-                await page.render({ canvasContext: ctx, viewport }).promise;
-            } catch (_) {
-                const ctx = canvas.getContext('2d');
-                ctx.fillStyle = '#f0f0f2';
-                ctx.fillRect(0, 0, canvas.width || 120, canvas.height || 160);
-                ctx.fillStyle = '#86868b';
-                ctx.font = '12px sans-serif';
-                ctx.textAlign = 'center';
-                ctx.textBaseline = 'middle';
-                ctx.fillText('Pág. ' + i, (canvas.width || 120) / 2, (canvas.height || 160) / 2);
-            }
-        }
-    } catch (err) {
-        alert('Error al cargar las páginas: ' + err.message);
-    }
+async function generatePdfFromImages(images, filename = 'output.pdf', level = 'high') {
+    const resp = await fetch('/compress', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ images, level })
+    });
+    if (!resp.ok) throw new Error(await resp.text());
+    const blob = await resp.blob();
+    downloadFile(blob, filename);
 }
