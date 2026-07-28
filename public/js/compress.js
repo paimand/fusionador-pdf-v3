@@ -1,5 +1,5 @@
 // ============================================================
-// COMPRESS LOGIC - ULTRA RÁPIDO Y PROGRESO PÁGINA A PÁGINA
+// COMPRESS LOGIC - REAJUSTE DE PARÁMETROS (12%, 45%, 95%)
 // ============================================================
 let compressFile = null;
 const dropZoneCompress = document.getElementById('dropZoneCompress');
@@ -79,27 +79,27 @@ if (dropZoneCompress && fileInputCompress && compressBtn) {
             const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
             const totalPages = pdf.numPages;
 
-            // Parámetros afinados para respuesta rápida y ratios exactos:
-            // Extreme: maxDimension 650px / quality 0.28 -> Caída drástica a ~12%
-            // Recommended: maxDimension 1300px / quality 0.65 -> Bajada efectiva a ~45%
-            // Low: maxDimension 2000px / quality 0.88 -> Conservador ~95%
+            // Parámetros recalibrados para 12%, 45% y 95%:
+            // Extreme: maxDimension 520px / quality 0.18 -> Bajar al ~12%
+            // Recommended: maxDimension 1500px / quality 0.72 -> Subir al ~45%
+            // Low: maxDimension 2400px / quality 0.92 -> Subir al ~95%
             let maxDimension, quality;
             switch (level) {
                 case 'extreme': 
-                    maxDimension = 650; 
-                    quality = 0.28; 
+                    maxDimension = 520; 
+                    quality = 0.18; 
                     break;
                 case 'recommended': 
-                    maxDimension = 1300; 
-                    quality = 0.65; 
+                    maxDimension = 1500; 
+                    quality = 0.72; 
                     break;
                 case 'low': 
-                    maxDimension = 2000; 
-                    quality = 0.88; 
+                    maxDimension = 2400; 
+                    quality = 0.92; 
                     break;
                 default: 
-                    maxDimension = 1300; 
-                    quality = 0.65;
+                    maxDimension = 1500; 
+                    quality = 0.72;
             }
 
             const images = [];
