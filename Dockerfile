@@ -20,7 +20,7 @@ WORKDIR /app
 COPY package*.json ./
 
 # 5. Instalación limpia de dependencias de producción utilizando npm ci
-RUN npm ci --omit=dev
+RUN npm install --omit=dev
 
 # 6. Copiar el resto del código fuente
 COPY . .
