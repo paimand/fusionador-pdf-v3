@@ -336,3 +336,43 @@ body {
         max-width: 200px;
     }
 }
+
+/* ============================================================
+   ESTILOS PARA HEADER Y FOOTER DINÁMICOS
+   ============================================================ */
+.main-nav {
+    display: flex;
+    justify-content: center;
+    gap: 16px;
+    margin-top: 16px;
+}
+
+.nav-item {
+    color: #64748b;
+    text-decoration: none;
+    font-weight: 500;
+    font-size: 0.95rem;
+    padding: 6px 14px;
+    border-radius: 6px;
+    transition: all 0.2s ease;
+}
+
+.nav-item:hover {
+    color: #ec9b59;
+    background-color: #fff7ed;
+}
+
+.nav-item.active {
+    color: #ec9b59;
+    background-color: #fff7ed;
+    font-weight: 600;
+}
+
+.app-footer {
+    margin-top: 40px;
+    padding-top: 20px;
+    border-top: 1px solid #e2e8f0;
+    text-align: center;
+    color: #94a3b8;
+    font-size: 0.85rem;
+}
