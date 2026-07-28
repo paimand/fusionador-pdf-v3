@@ -4,31 +4,15 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Unir PDFs - Suite PDF</title>
+    
+    <!-- Librerías externas -->
     <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+    
+    <!-- Fuentes y estilos -->
     <link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,400;14..32,500;14..32,600;14..32,700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="/css/common.css">
-    <style>
-        .back-link {
-            display: inline-block;
-            margin-bottom: 20px;
-            color: #ec9b59;
-            text-decoration: none;
-            font-weight: 500;
-        }
-        .back-link:hover {
-            text-decoration: underline;
-        }
-        .omitted-text {
-            color: #d32f2f;
-            font-weight: 500;
-            margin-top: 8px;
-            padding: 12px;
-            background-color: #fef2f2;
-            border-radius: 8px;
-            border-left: 4px solid #d32f2f;
-        }
-    </style>
+    <link rel="stylesheet" href="/css/merge.css">
 </head>
 <body>
 
@@ -55,141 +39,20 @@
         <ul id="fileListMerge" class="file-list"></ul>
 
         <!-- Acciones -->
-        <div class="actions">
+        <div class="actions" style="margin-top: 24px;">
             <button id="clearMerge" class="btn btn-secondary">Vaciar lista</button>
             <button id="mergeBtn" class="btn btn-primary">Unir PDFs</button>
         </div>
+
         <div id="mergeStatus" style="margin-top:12px;"></div>
         <div id="mergeOmitted" style="margin-top:12px;"></div>
 
         <div id="loading">⏳ Procesando... Por favor espera.</div>
     </div>
 
+    <!-- Scripts modularizados -->
     <script src="/js/common.js"></script>
-    <script>
-        // ============================================================
-        // MERGE (UNIR) - CON DETECCIÓN DE ARCHIVOS OMITIDOS
-        // ============================================================
-        let mergeFiles = [];
-        const fileListMerge = document.getElementById('fileListMerge');
-        const fileCountMerge = document.getElementById('fileCountMerge');
-        const mergeBtn = document.getElementById('mergeBtn');
-        const mergeOmitted = document.getElementById('mergeOmitted');
-
-        new Sortable(fileListMerge, {
-            animation: 150,
-            ghostClass: 'sortable-ghost',
-            onEnd: function(evt) {
-                const [moved] = mergeFiles.splice(evt.oldIndex, 1);
-                mergeFiles.splice(evt.newIndex, 0, moved);
-                updateMergeCount();
-            }
-        });
-
-        function updateMergeCount() {
-            const count = mergeFiles.length;
-            fileCountMerge.textContent = count === 0 ? '0 archivos' : (count === 1 ? '1 archivo' : `${count} archivos`);
-        }
-
-        function renderMergeList() {
-            fileListMerge.innerHTML = '';
-            mergeFiles.forEach((file, index) => {
-                const li = document.createElement('li');
-                const thumbDiv = document.createElement('div');
-                thumbDiv.className = 'thumbnail';
-                const canvas = document.createElement('canvas');
-                thumbDiv.appendChild(canvas);
-                li.appendChild(thumbDiv);
-                renderThumbnail(file, canvas);
-
-                const infoDiv = document.createElement('div');
-                infoDiv.className = 'file-info';
-                const nameSpan = document.createElement('div');
-                nameSpan.className = 'file-name';
-                nameSpan.textContent = file.name;
-                const metaSpan = document.createElement('div');
-                metaSpan.className = 'file-meta';
-                metaSpan.textContent = (file.size / 1024).toFixed(1) + ' KB';
-                infoDiv.appendChild(nameSpan);
-                infoDiv.appendChild(metaSpan);
-                li.appendChild(infoDiv);
-
-                const delBtn = document.createElement('button');
-                delBtn.className = 'delete-btn';
-                delBtn.textContent = '×';
-                delBtn.addEventListener('click', () => {
-                    mergeFiles.splice(index, 1);
-                    renderMergeList();
-                });
-                li.appendChild(delBtn);
-                fileListMerge.appendChild(li);
-            });
-            updateMergeCount();
-        }
-
-        function handleMergeFiles(files) {
-            const pdfFiles = Array.from(files).filter(f => f.type === 'application/pdf' || f.name.endsWith('.pdf'));
-            if (pdfFiles.length === 0) { alert('Solo se permiten PDF'); return; }
-            mergeFiles.push(...pdfFiles);
-            renderMergeList();
-            document.getElementById('fileInputMerge').value = '';
-        }
-
-        setupDropZone('dropZoneMerge', 'fileInputMerge', handleMergeFiles);
-
-        document.getElementById('clearMerge').addEventListener('click', () => {
-            mergeFiles = [];
-            renderMergeList();
-            mergeOmitted.innerHTML = '';
-            showStatus('mergeStatus', '');
-        });
-
-        mergeBtn.addEventListener('click', async () => {
-            if (mergeFiles.length === 0) {
-                alert('No hay archivos para unir');
-                return;
-            }
-
-            mergeBtn.disabled = true;
-            showLoading(true);
-            showStatus('mergeStatus', '⏳ Uniendo PDFs...');
-            mergeOmitted.innerHTML = '';
-
-            try {
-                const formData = new FormData();
-                mergeFiles.forEach(f => formData.append('pdfs', f));
-
-                const resp = await fetch('/merge', {
-                    method: 'POST',
-                    body: formData
-                });
-
-                if (!resp.ok) {
-                    const errorText = await resp.text();
-                    throw new Error(errorText || 'Error al fusionar');
-                }
-
-                // Leer cabecera de archivos omitidos
-                const omitted = resp.headers.get('X-Omitted');
-                if (omitted) {
-                    mergeOmitted.innerHTML = `<div class="omitted-text">⚠️ ${omitted}</div>`;
-                }
-
-                const blob = await resp.blob();
-                downloadFile(blob, 'merged.pdf');
-                showStatus('mergeStatus', '✅ PDFs unidos correctamente');
-            } catch (err) {
-                showStatus('mergeStatus', '❌ ' + err.message, true);
-                console.error(err);
-            } finally {
-                mergeBtn.disabled = false;
-                showLoading(false);
-            }
-        });
-
-        // Inicializar
-        updateMergeCount();
-    </script>
+    <script src="/js/merge.js"></script>
 
 </body>
 </html>
