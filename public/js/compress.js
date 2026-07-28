@@ -1,5 +1,5 @@
 // ============================================================
-// COMPRESS LOGIC - RECALIBRACIÓN FINA (~12%, ~45%, ~95%)
+// COMPRESS LOGIC - REAJUSTE DE LÍMITES (~12%, ~45%, ~95%)
 // ============================================================
 let compressFile = null;
 const dropZoneCompress = document.getElementById('dropZoneCompress');
@@ -81,31 +81,31 @@ if (dropZoneCompress && fileInputCompress && compressBtn) {
             const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
             const totalPages = pdf.numPages;
 
-            // Parámetros afinados según los últimos resultados del test:
-            // Extreme: 750px / quality 0.42  -> Ajusta del 23% hacia el ~12%
-            // Recommended: 1800px / quality 0.84 -> Ajusta del 33% hacia el ~45%
-            // Low: Render escala 2.0x / quality 0.98 -> Ajusta del 90% hacia el ~95%
-            let maxDimension, quality, forceOriginalScale;
+            // Parámetros reajustados:
+            // Extreme: 820px / quality 0.46 -> Subir del 7% al ~12%
+            // Recommended: 2100px / quality 0.87 -> Subir del 38% al ~45%
+            // Low: Escala nativa (1.33x) / quality 0.88 -> Reducir al ~95% sin sobrepasar el peso original
+            let maxDimension, quality, targetScale;
             switch (level) {
                 case 'extreme': 
-                    maxDimension = 750; 
-                    quality = 0.42; 
-                    forceOriginalScale = false;
+                    maxDimension = 820; 
+                    quality = 0.46; 
+                    targetScale = null;
                     break;
                 case 'recommended': 
-                    maxDimension = 1800; 
-                    quality = 0.84; 
-                    forceOriginalScale = false;
+                    maxDimension = 2100; 
+                    quality = 0.87; 
+                    targetScale = null;
                     break;
                 case 'low': 
-                    maxDimension = 3200; 
-                    quality = 0.98; 
-                    forceOriginalScale = true;
+                    maxDimension = 2600; 
+                    quality = 0.88; 
+                    targetScale = 1.33; // Escala moderada sin engordar el documento
                     break;
                 default: 
-                    maxDimension = 1800; 
-                    quality = 0.84;
-                    forceOriginalScale = false;
+                    maxDimension = 2100; 
+                    quality = 0.87;
+                    targetScale = null;
             }
 
             const images = [];
@@ -114,16 +114,13 @@ if (dropZoneCompress && fileInputCompress && compressBtn) {
                 showStatus('compressStatus', `⏳ Procesando página ${i} de ${totalPages}...`);
                 const page = await pdf.getPage(i);
                 
-                let scale = 1.5;
                 const unscaledViewport = page.getViewport({ scale: 1.0 });
+                const currentMax = Math.max(unscaledViewport.width, unscaledViewport.height);
+                
+                let scale = targetScale || 1.5;
 
-                if (!forceOriginalScale) {
-                    const currentMax = Math.max(unscaledViewport.width, unscaledViewport.height);
-                    if (currentMax > maxDimension) {
-                        scale = maxDimension / currentMax;
-                    }
-                } else {
-                    scale = 2.0; 
+                if (!targetScale && currentMax > maxDimension) {
+                    scale = maxDimension / currentMax;
                 }
 
                 const viewport = page.getViewport({ scale });
