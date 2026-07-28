@@ -3,19 +3,21 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Eliminar páginas - Suite PDF</title>
-    <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
+    <title>Eliminar Páginas PDF - Suite PDF</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,400;14..32,500;14..32,600;14..32,700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="css/common.css">
+    <link rel="stylesheet" href="css/delete.css">
 </head>
 <body>
     <div class="container">
+        <a href="index.html" class="back-link">← Volver al inicio</a>
+
         <header class="tool-header">
             <a href="index.html" style="text-decoration:none; color:inherit;">
                 <img src="https://i.ibb.co/RTgVzm5q/Suite-PDF-removebg-preview.png" alt="Suite PDF">
             </a>
-            <p>Elimina páginas no deseadas de tu PDF.</p>
+            <p>Selecciona las páginas que deseas eliminar de tu documento PDF.</p>
         </header>
 
         <div class="upload-area" id="dropZoneDelete">
@@ -24,76 +26,21 @@
         </div>
 
         <div id="deletePreview" style="display:none; margin-bottom:16px;">
-            <div class="grid-controls">
-                <button id="deleteSelectAll" class="btn btn-secondary" style="padding:6px 14px;">Seleccionar todas</button>
-                <button id="deleteDeselectAll" class="btn btn-secondary" style="padding:6px 14px;">Deseleccionar todas</button>
+            <div class="grid-controls" style="margin-bottom: 12px;">
+                <button id="deleteSelectAll" class="btn btn-secondary" style="padding:6px 14px;">Marcar todas</button>
+                <button id="deleteDeselectAll" class="btn btn-secondary" style="padding:6px 14px;">Desmarcar todas</button>
             </div>
             <div id="deletePageGrid" class="page-grid"></div>
         </div>
 
-        <div style="margin:16px 0;">
-            <label for="deletePages">O escribe páginas a eliminar (ej. 1,3-5,7):</label>
-            <input type="text" id="deletePages" placeholder="Ej: 1,3-5,7" style="width:100%;padding:8px;border:1px solid #ccc;border-radius:6px;">
-        </div>
-
         <div class="actions">
-            <button id="deleteBtn" class="btn btn-primary">Eliminar páginas</button>
+            <button id="deleteBtn" class="btn btn-primary">Eliminar Páginas</button>
         </div>
         <div id="deleteStatus" style="margin-top:12px;"></div>
-        <div id="loading">⏳ Procesando...</div>
+        <div id="loading" style="display:none;">⏳ Procesando...</div>
     </div>
 
     <script src="js/common.js"></script>
-    <script>
-        // ============================================================
-        // LÓGICA ESPECÍFICA DE DELETE
-        // ============================================================
-        let deleteFile = null;
-        let deleteSelections = [];
-        const deleteBtn = document.getElementById('deleteBtn');
-        const deletePagesInput = document.getElementById('deletePages');
-
-        setupDropZone('dropZoneDelete', 'fileInputDelete', files => {
-            deleteFile = files[0];
-            document.querySelector('#dropZoneDelete p').textContent = `📄 ${deleteFile.name}`;
-            renderPageGrid(deleteFile, 'deletePageGrid', deleteSelections);
-        });
-
-        document.getElementById('deleteSelectAll').addEventListener('click', () => {
-            deleteSelections.fill(true);
-            renderPageGrid(deleteFile, 'deletePageGrid', deleteSelections);
-        });
-        document.getElementById('deleteDeselectAll').addEventListener('click', () => {
-            deleteSelections.fill(false);
-            renderPageGrid(deleteFile, 'deletePageGrid', deleteSelections);
-        });
-
-        deleteBtn.addEventListener('click', async () => {
-            if (!deleteFile) { alert('Selecciona un PDF'); return; }
-            let pagesToDelete = deletePagesInput.value.trim();
-            if (!pagesToDelete) {
-                const selected = deleteSelections.map((sel, idx) => sel ? idx + 1 : null).filter(v => v !== null);
-                if (selected.length === 0) { alert('Selecciona al menos una página o escribe rangos'); return; }
-                pagesToDelete = selected.join(',');
-            }
-            
-            deleteBtn.disabled = true;
-            showLoading(true);
-            try {
-                const formData = new FormData();
-                formData.append('file', deleteFile);
-                formData.append('pagesToDelete', pagesToDelete);
-                const resp = await fetch('/delete-pages', { method: 'POST', body: formData });
-                if (!resp.ok) throw new Error(await resp.text());
-                downloadFile(await resp.blob(), 'modified.pdf');
-                showStatus('deleteStatus', '✅ Páginas eliminadas correctamente');
-            } catch (err) {
-                showStatus('deleteStatus', '❌ ' + err.message, true);
-            } finally {
-                deleteBtn.disabled = false;
-                showLoading(false);
-            }
-        });
-    </script>
+    <script src="js/delete.js"></script>
 </body>
 </html>
