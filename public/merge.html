@@ -58,7 +58,7 @@
     <script src="/js/common.js"></script>
     <script>
         // ============================================================
-        // MERGE (UNIR) - VERSIÓN ORIGINAL (COPIA DE PÁGINAS)
+        // MERGE (UNIR) - CON DETECCIÓN DE PDFs PROBLEMÁTICOS
         // ============================================================
         let mergeFiles = [];
         const fileListMerge = document.getElementById('fileListMerge');
@@ -131,6 +131,9 @@
             renderMergeList();
         });
 
+        // ============================================================
+        // LÓGICA PRINCIPAL DE UNIÓN
+        // ============================================================
         mergeBtn.addEventListener('click', async () => {
             if (mergeFiles.length === 0) {
                 alert('No hay archivos para unir');
@@ -139,25 +142,66 @@
 
             mergeBtn.disabled = true;
             showLoading(true);
-            showStatus('mergeStatus', '⏳ Uniendo PDFs...');
+            showStatus('mergeStatus', '⏳ Verificando compatibilidad de archivos...');
 
             try {
-                const formData = new FormData();
-                mergeFiles.forEach(f => formData.append('pdfs', f));
-
-                const resp = await fetch('/merge', {
-                    method: 'POST',
-                    body: formData
-                });
-
-                if (!resp.ok) {
-                    const errorText = await resp.text();
-                    throw new Error(errorText || 'Error al fusionar');
+                // 1. Detectar si algún archivo es problemático
+                let problematicFiles = [];
+                for (const file of mergeFiles) {
+                    const isProblematic = await isPdfProblematic(file);
+                    if (isProblematic) {
+                        problematicFiles.push(file.name);
+                    }
                 }
 
-                const blob = await resp.blob();
-                downloadFile(blob, 'merged.pdf');
-                showStatus('mergeStatus', '✅ PDFs unidos correctamente');
+                // 2. Si hay archivos problemáticos, rasterizar todos
+                if (problematicFiles.length > 0) {
+                    const mensaje = `Se han detectado archivos con formato complejo (${problematicFiles.join(', ')}). Se procederá a rasterizar todos los archivos para garantizar la compatibilidad. Esto puede aumentar ligeramente el tamaño final.`;
+                    showStatus('mergeStatus', '⚠️ ' + mensaje, false);
+                    // Esperar un momento para que el usuario vea el mensaje
+                    await new Promise(resolve => setTimeout(resolve, 1500));
+
+                    // Rasterizar todos los archivos con calidad moderada
+                    let allImages = [];
+                    let totalPages = 0;
+                    for (const file of mergeFiles) {
+                        showStatus('mergeStatus', `⏳ Rasterizando ${file.name}...`);
+                        const images = await rasterizePdfToImages(file, {
+                            maxWidth: 1500,
+                            quality: 0.85,
+                            minDimension: 1200
+                        });
+                        allImages = allImages.concat(images);
+                        totalPages += images.length;
+                    }
+
+                    if (allImages.length === 0) {
+                        throw new Error('No se generaron imágenes de los PDFs');
+                    }
+
+                    showStatus('mergeStatus', `⏳ Generando PDF combinado (${totalPages} páginas)...`);
+                    await generatePdfFromImages(allImages, 'merged.pdf', 'merge');
+                    showStatus('mergeStatus', '✅ PDFs unidos correctamente (modo compatibilidad)');
+                } else {
+                    // 3. Si no hay problemáticos, usar el método normal (copiar páginas)
+                    showStatus('mergeStatus', '⏳ Uniendo PDFs...');
+                    const formData = new FormData();
+                    mergeFiles.forEach(f => formData.append('pdfs', f));
+
+                    const resp = await fetch('/merge', {
+                        method: 'POST',
+                        body: formData
+                    });
+
+                    if (!resp.ok) {
+                        const errorText = await resp.text();
+                        throw new Error(errorText || 'Error al fusionar');
+                    }
+
+                    const blob = await resp.blob();
+                    downloadFile(blob, 'merged.pdf');
+                    showStatus('mergeStatus', '✅ PDFs unidos correctamente');
+                }
             } catch (err) {
                 showStatus('mergeStatus', '❌ ' + err.message, true);
                 console.error(err);
