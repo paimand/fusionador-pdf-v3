@@ -1,9 +1,20 @@
 // ============================================================
-// CONFIGURACIÓN DE PDF.JS Y FUNCIONES AUXILIARES
+// CARGA DINÁMICA DE PDF.JS Y FUNCIONES AUXILIARES
 // ============================================================
-if (typeof pdfjsLib !== 'undefined' && !pdfjsLib.GlobalWorkerOptions.workerSrc) {
-    pdfjsLib.GlobalWorkerOptions.workerSrc =
-        'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+async function ensurePdfJsLoaded() {
+    if (typeof pdfjsLib === 'undefined') {
+        await new Promise((resolve, reject) => {
+            const script = document.createElement('script');
+            script.src = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
+            script.onload = resolve;
+            script.onerror = () => reject(new Error('No se pudo cargar la librería PDF.js'));
+            document.head.appendChild(script);
+        });
+    }
+    if (pdfjsLib && !pdfjsLib.GlobalWorkerOptions.workerSrc) {
+        pdfjsLib.GlobalWorkerOptions.workerSrc =
+            'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+    }
 }
 
 function readFileAsArrayBuffer(file) {
@@ -29,7 +40,7 @@ function showStatus(elementId, message, isError = false) {
 }
 
 // ============================================================
-// COMPRESS (comprimir PDF en cliente)
+// COMPRESS LOGIC
 // ============================================================
 let compressFile = null;
 const dropZoneCompress = document.getElementById('dropZoneCompress');
@@ -38,7 +49,7 @@ const compressBtn = document.getElementById('compressBtn');
 
 if (dropZoneCompress && fileInputCompress && compressBtn) {
 
-    // Evitar comportamientos por defecto del navegador al arrastrar
+    // Prevenir eventos predeterminados de arrastre
     ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
         dropZoneCompress.addEventListener(eventName, e => {
             e.preventDefault();
@@ -46,7 +57,6 @@ if (dropZoneCompress && fileInputCompress && compressBtn) {
         }, false);
     });
 
-    // Resaltar la zona de arrastre al pasar el archivo por encima
     ['dragenter', 'dragover'].forEach(eventName => {
         dropZoneCompress.addEventListener(eventName, () => {
             dropZoneCompress.classList.add('dragover');
@@ -59,7 +69,6 @@ if (dropZoneCompress && fileInputCompress && compressBtn) {
         }, false);
     });
 
-    // Manejo del evento drop (soltar archivo)
     dropZoneCompress.addEventListener('drop', e => {
         const dt = e.dataTransfer;
         const files = dt.files;
@@ -80,7 +89,6 @@ if (dropZoneCompress && fileInputCompress && compressBtn) {
         }
     });
 
-    // Selección mediante clic convencional
     dropZoneCompress.addEventListener('click', () => fileInputCompress.click());
 
     fileInputCompress.addEventListener('change', e => {
@@ -91,21 +99,25 @@ if (dropZoneCompress && fileInputCompress && compressBtn) {
         }
     });
 
-    // Evento del botón de compresión
     compressBtn.addEventListener('click', async () => {
         if (!compressFile) { 
             alert('Selecciona un PDF para comprimir'); 
             return; 
         }
 
-        const selectedRadio = document.querySelector('input[name="compressLevel"]:checked');
-        const level = selectedRadio ? selectedRadio.value : 'recommended';
-
         compressBtn.disabled = true;
         showLoading(true);
-        showStatus('compressStatus', '⏳ Procesando optimización...');
+        showStatus('compressStatus', '⏳ Inicializando motor PDF...');
 
         try {
+            // Asegurar que PDF.js esté cargado antes de procesar
+            await ensurePdfJsLoaded();
+
+            const selectedRadio = document.querySelector('input[name="compressLevel"]:checked');
+            const level = selectedRadio ? selectedRadio.value : 'recommended';
+
+            showStatus('compressStatus', '⏳ Procesando optimización...');
+
             const arrayBuffer = await readFileAsArrayBuffer(compressFile);
             const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
             const totalPages = pdf.numPages;
