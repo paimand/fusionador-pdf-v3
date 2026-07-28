@@ -4,7 +4,7 @@ const { PDFDocument } = require('pdf-lib');
 const JSZip = require('jszip');
 const { execFile } = require('child_process');
 const fs = require('fs/promises');
-const path = require('path');
+const path = path = require('path');
 const os = require('os');
 const util = require('util');
 
@@ -46,10 +46,11 @@ async function cleanPdfBuffer(inputBuffer) {
 }
 
 /**
- * Convierte un string de rangos (ej: "1,3-5,7") en un array de índices numéricos basados en 0
+ * Convierte un string de rangos/páginas (ej: "3,1,2" o "1,3-5,7") en un array 
+ * preservando EXACTAMENTE el orden especificado (sin reordenar numéricamente).
  */
 function parsePageRanges(rangesStr, totalPages) {
-  const pageIndices = new Set();
+  const pageIndices = [];
   const parts = rangesStr.split(',');
 
   for (const part of parts) {
@@ -57,21 +58,25 @@ function parsePageRanges(rangesStr, totalPages) {
     if (trimmed.includes('-')) {
       const [start, end] = trimmed.split('-').map(num => parseInt(num.trim(), 10));
       if (!isNaN(start) && !isNaN(end)) {
-        const min = Math.max(1, Math.min(start, end));
-        const max = Math.min(totalPages, Math.max(start, end));
-        for (let i = min; i <= max; i++) {
-          pageIndices.add(i - 1);
+        const step = start <= end ? 1 : -1;
+        let current = start;
+        while (true) {
+          if (current >= 1 && current <= totalPages) {
+            pageIndices.push(current - 1);
+          }
+          if (current === end) break;
+          current += step;
         }
       }
     } else {
       const pageNum = parseInt(trimmed, 10);
       if (!isNaN(pageNum) && pageNum >= 1 && pageNum <= totalPages) {
-        pageIndices.add(pageNum - 1);
+        pageIndices.push(pageNum - 1);
       }
     }
   }
 
-  return Array.from(pageIndices).sort((a, b) => a - b);
+  return pageIndices;
 }
 
 // ------------------------------------------------------------
@@ -106,7 +111,7 @@ app.post('/merge', upload.any(), async (req, res) => {
 });
 
 // ------------------------------------------------------------
-// RUTA: DIVIDIR PDF
+// RUTA: DIVIDIR / REORDENAR / EXTRAER PDF
 // ------------------------------------------------------------
 app.post('/split', upload.any(), async (req, res) => {
   try {
@@ -159,26 +164,29 @@ app.post('/split', upload.any(), async (req, res) => {
       return res.send(zipBuffer);
 
     } else {
-      // Modo Rangos: genera un único PDF con la selección especificada
+      // Modo Rangos / Reordenar / Extraer: copia las páginas respetando la secuencia exacta recibida
       const targetIndices = parsePageRanges(rangesStr, totalPages);
 
       if (targetIndices.length === 0) {
-        return res.status(400).json({ error: 'El rango de páginas introducido no es válido.' });
+        return res.status(400).json({ error: 'El rango o secuencia de páginas no es válido.' });
       }
 
       const outputPdf = await PDFDocument.create();
-      const copiedPages = await outputPdf.copyPages(srcPdf, targetIndices);
-      copiedPages.forEach((page) => outputPdf.addPage(page));
+
+      for (const pageIdx of targetIndices) {
+        const [copiedPage] = await outputPdf.copyPages(srcPdf, [pageIdx]);
+        outputPdf.addPage(copiedPage);
+      }
 
       const pdfBytes = await outputPdf.save();
       res.setHeader('Content-Type', 'application/pdf');
-      res.setHeader('Content-Disposition', 'attachment; filename="documento_dividido.pdf"');
+      res.setHeader('Content-Disposition', 'attachment; filename="documento_procesado.pdf"');
       return res.send(Buffer.from(pdfBytes));
     }
 
   } catch (err) {
     console.error('Error general en /split:', err);
-    res.status(500).json({ error: 'Error al dividir el archivo PDF.', details: err.message });
+    res.status(500).json({ error: 'Error al procesar el archivo PDF.', details: err.message });
   }
 });
 
@@ -217,8 +225,10 @@ app.post('/delete', upload.any(), async (req, res) => {
     }
 
     const outputPdf = await PDFDocument.create();
-    const copiedPages = await outputPdf.copyPages(srcPdf, keepIndices);
-    copiedPages.forEach(page => outputPdf.addPage(page));
+    for (const pageIdx of keepIndices) {
+      const [copiedPage] = await outputPdf.copyPages(srcPdf, [pageIdx]);
+      outputPdf.addPage(copiedPage);
+    }
 
     const pdfBytes = await outputPdf.save();
 
