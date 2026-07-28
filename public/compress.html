@@ -17,14 +17,14 @@
         <!-- Header con Logo -->
         <header class="tool-header">
             <a href="index.html">
-                <img src="https://i.ibb.co/RTgVzm5q/Suite-PDF-removebg-preview.png" alt="Suite PDF">
+                <img src="https://i.ibb.co/RTgVzm5q/Suite-PDF-removebg-preview.png" alt="Suite PDF" class="logo">
             </a>
-            <h2>Comprimir PDF</h2>
+            <h1>Comprimir PDF</h1>
             <p>Reduce el tamaño de tu archivo PDF manteniendo la mejor calidad posible.</p>
         </header>
 
         <!-- Panel de Compresión -->
-        <div id="compressPanel" class="panel active">
+        <main class="panel active">
             
             <!-- Área de Subida / Drag & Drop -->
             <div class="upload-area" id="dropZoneCompress">
@@ -33,9 +33,9 @@
             </div>
 
             <!-- Opciones del Nivel de Compresión -->
-            <div style="margin: 20px 0; text-align: left;">
+            <div class="options-container" style="margin: 20px 0; text-align: left;">
                 <label style="display:block; margin-bottom:12px; font-weight:600; font-size: 15px;">
-                    Selecciona el nivel de compresión:
+                    Nivel de compresión:
                 </label>
                 <div style="display: flex; flex-direction: column; gap: 10px; background: #fafafc; padding: 16px; border-radius: 12px; border: 1px solid #e5e5ea;">
                     <label style="cursor:pointer; display: flex; align-items: center; gap: 8px;">
@@ -61,7 +61,7 @@
 
             <!-- Estado del Procesamiento -->
             <div id="compressStatus" style="margin-top:16px; font-weight:500;"></div>
-        </div>
+        </main>
 
         <!-- Indicador de Carga Global -->
         <div id="loading" style="display:none; margin-top:20px; text-align:center; color:#ec9b59; font-weight:600;">
