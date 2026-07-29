@@ -19,6 +19,7 @@ function injectHeader() {
     if (!headerContainer) return;
 
     const currentPath = window.location.pathname;
+    const currentSearch = window.location.search;
 
     headerContainer.innerHTML = `
         <header class="navbar-ilove">
@@ -31,7 +32,7 @@ function injectHeader() {
                 <!-- NAVEGACIÓN PRINCIPAL -->
                 <nav class="navbar-nav">
                     <a href="/merge.html" class="nav-link ${currentPath.includes('merge') ? 'active' : ''}">UNIR PDF</a>
-                    <a href="/split.html" class="nav-link ${currentPath.includes('split') ? 'active' : ''}">DIVIDIR PDF</a>
+                    <a href="/split.html" class="nav-link ${currentPath.includes('split') && !currentSearch.includes('mode=extract') ? 'active' : ''}">DIVIDIR PDF</a>
                     <a href="/compress.html" class="nav-link ${currentPath.includes('compress') ? 'active' : ''}">COMPRIMIR PDF</a>
 
                     <!-- MENÚ DESPLEGABLE: TODAS LAS HERRAMIENTAS -->
@@ -48,11 +49,11 @@ function injectHeader() {
                                     <small>Quita las páginas innecesarias del PDF</small>
                                 </div>
                             </a>
-                            <a href="/split.html" class="dropdown-item ${currentPath.includes('split') ? 'active' : ''}">
+                            <a href="/split.html?mode=extract" class="dropdown-item ${currentSearch.includes('mode=extract') ? 'active' : ''}">
                                 <span class="icon">✂️</span>
                                 <div class="item-text">
                                     <strong>Extraer páginas</strong>
-                                    <small>Separa páginas o selecciona rangos</small>
+                                    <small>Selecciona y extrae páginas específicas</small>
                                 </div>
                             </a>
                             <a href="/reorder.html" class="dropdown-item ${currentPath.includes('reorder') ? 'active' : ''}">
@@ -152,7 +153,7 @@ function setupDropZone(dropZoneId, inputId, onFilesSelected) {
     });
 
     ['dragleave', 'drop'].forEach(eventName => {
-        dropZone.addEventListener(eventName, () => dropZone.classList.remove('dragover'), false);
+        dropZone.addEventListener(eventName, () => dropZone.classList.remove('dragleave'), false);
     });
 
     dropZone.addEventListener('drop', e => {
