@@ -39,6 +39,10 @@ app.get('/split.html', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'split.html'));
 });
 
+app.get('/extract.html', (req, res) => {
+    res.sendFile(path.join(__dirname, 'public', 'extract.html'));
+});
+
 app.get('/compress.html', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'compress.html'));
 });
@@ -63,7 +67,8 @@ app.post('/merge', upload.any(), async (req, res) => {
         const mergedPdf = await PDFDocument.create();
 
         for (const file of req.files) {
-            const pdf = await PDFDocument.load(file.buffer);
+            // Se añade { ignoreEncryption: true } para omitir cifrados/firmas de recibos bancarios
+            const pdf = await PDFDocument.load(file.buffer, { ignoreEncryption: true });
             const copiedPages = await mergedPdf.copyPages(pdf, pdf.getPageIndices());
             copiedPages.forEach(page => mergedPdf.addPage(page));
         }
@@ -152,7 +157,6 @@ app.post('/reorder', upload.single('file'), async (req, res) => {
         const srcPdf = await PDFDocument.load(file.buffer, { ignoreEncryption: true });
         const totalPages = srcPdf.getPageCount();
 
-        // Convertir la secuencia a índices base-0 respetando estrictamente el orden recibido
         const pageIndices = pageOrderStr
             .split(',')
             .map(n => parseInt(n.trim(), 10) - 1)
@@ -164,7 +168,6 @@ app.post('/reorder', upload.single('file'), async (req, res) => {
 
         const newPdf = await PDFDocument.create();
 
-        // Copiar página por página en la secuencia exacta elegida
         for (const idx of pageIndices) {
             const [copiedPage] = await newPdf.copyPages(srcPdf, [idx]);
             newPdf.addPage(copiedPage);
@@ -274,7 +277,7 @@ app.post('/delete', upload.any(), async (req, res) => {
     }
 });
 
-// Fallback final: si entra a una ruta no registrada, devuelve index.html de public
+// Fallback final
 app.use((req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
