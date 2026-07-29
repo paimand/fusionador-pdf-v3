@@ -76,93 +76,65 @@ app.post('/merge', upload.any(), async (req, res) => {
 });
 
 // ============================================================
-// 2. ENDPOINT: DIVIDIR PDF (/split)
+// 2. ENDPOINT CORREGIDO: DIVIDIR / EXTRAER PDF (/split)
 // ============================================================
 app.post('/split', upload.single('file'), async (req, res) => {
     try {
-        if (!req.file) {
-            return res.status(400).send('No se ha subido ningún archivo.');
+        const file = req.file || (req.files && req.files[0]);
+        if (!file) {
+            return res.status(400).send('No se ha recibido ningún archivo PDF.');
         }
 
         const mode = req.body.mode || 'individual';
         const rangesStr = req.body.ranges || '';
-        const srcPdf = await PDFDocument.load(req.file.buffer);
+        const srcPdf = await PDFDocument.load(file.buffer, { ignoreEncryption: true });
         const totalPages = srcPdf.getPageCount();
 
+        // Obtener la lista de páginas numéricas a extraer
+        let pagesToExtract = [];
+
         if (mode === 'individual') {
-            const selectedPages = rangesStr.split(',')
+            pagesToExtract = rangesStr.split(',')
                 .map(n => parseInt(n.trim(), 10))
                 .filter(n => !isNaN(n) && n >= 1 && n <= totalPages);
-
-            if (selectedPages.length === 0) {
-                return res.status(400).send('No se seleccionaron páginas válidas.');
-            }
-
-            if (selectedPages.length === 1) {
-                const newPdf = await PDFDocument.create();
-                const [copied] = await newPdf.copyPages(srcPdf, [selectedPages[0] - 1]);
-                newPdf.addPage(copied);
-                const bytes = await newPdf.save();
-
-                res.setHeader('Content-Type', 'application/pdf');
-                res.setHeader('Content-Disposition', `attachment; filename="pagina_${selectedPages[0]}.pdf"`);
-                return res.send(Buffer.from(bytes));
-            }
-
-            const archive = Archiver('zip', { zlib: { level: 6 } });
-            res.setHeader('Content-Type', 'application/zip');
-            res.setHeader('Content-Disposition', 'attachment; filename="paginas_divididas.zip"');
-            archive.pipe(res);
-
-            for (const pageNum of selectedPages) {
-                const newPdf = await PDFDocument.create();
-                const [copied] = await newPdf.copyPages(srcPdf, [pageNum - 1]);
-                newPdf.addPage(copied);
-                const bytes = await newPdf.save();
-                archive.append(Buffer.from(bytes), { name: `pagina_${pageNum}.pdf` });
-            }
-
-            await archive.finalize();
-
         } else {
+            // Manejo de rangos (ej. "1-3, 5")
             const groups = rangesStr.split(',').map(s => s.trim()).filter(Boolean);
-            if (groups.length === 0) {
-                return res.status(400).send('Debe especificar al menos un rango.');
-            }
-
-            const archive = Archiver('zip', { zlib: { level: 6 } });
-            res.setHeader('Content-Type', 'application/zip');
-            res.setHeader('Content-Disposition', 'attachment; filename="rangos_divididos.zip"');
-            archive.pipe(res);
-
-            for (let idx = 0; idx < groups.length; idx++) {
-                const group = groups[idx];
-                const parts = group.split('-').map(n => parseInt(n.trim(), 10));
-                let start = parts[0];
-                let end = parts[1] || start;
-
-                if (isNaN(start) || start < 1) start = 1;
-                if (isNaN(end) || end > totalPages) end = totalPages;
-
-                const newPdf = await PDFDocument.create();
-                const pageIndices = [];
-                for (let p = start; p <= end; p++) {
-                    pageIndices.push(p - 1);
-                }
-
-                if (pageIndices.length > 0) {
-                    const copiedPages = await newPdf.copyPages(srcPdf, pageIndices);
-                    copiedPages.forEach(p => newPdf.addPage(p));
-                    const bytes = await newPdf.save();
-                    archive.append(Buffer.from(bytes), { name: `rango_${group}.pdf` });
+            for (const group of groups) {
+                if (group.includes('-')) {
+                    const [start, end] = group.split('-').map(n => parseInt(n.trim(), 10));
+                    const pStart = isNaN(start) ? 1 : Math.max(1, start);
+                    const pEnd = isNaN(end) ? totalPages : Math.min(totalPages, end);
+                    for (let p = pStart; p <= pEnd; p++) pagesToExtract.push(p);
+                } else {
+                    const p = parseInt(group, 10);
+                    if (!isNaN(p) && p >= 1 && p <= totalPages) pagesToExtract.push(p);
                 }
             }
-
-            await archive.finalize();
         }
+
+        // Eliminar duplicados y ordenar
+        pagesToExtract = [...new Set(pagesToExtract)].sort((a, b) => a - b);
+
+        if (pagesToExtract.length === 0) {
+            return res.status(400).send('No se han especificado páginas válidas.');
+        }
+
+        // Crear un nuevo documento PDF con la selección
+        const newPdf = await PDFDocument.create();
+        const pageIndices = pagesToExtract.map(p => p - 1);
+        const copiedPages = await newPdf.copyPages(srcPdf, pageIndices);
+        copiedPages.forEach(p => newPdf.addPage(p));
+
+        const pdfBytes = await newPdf.save();
+
+        res.setHeader('Content-Type', 'application/pdf');
+        res.setHeader('Content-Disposition', 'attachment; filename="documento_extraido.pdf"');
+        return res.send(Buffer.from(pdfBytes));
+
     } catch (error) {
         console.error('Error en /split:', error);
-        return res.status(500).send('Error dividiendo el PDF: ' + error.message);
+        return res.status(500).send('Error extrayendo las páginas: ' + error.message);
     }
 });
 
@@ -217,7 +189,6 @@ app.post('/delete', upload.any(), async (req, res) => {
             return res.status(400).send('No se ha recibido ningún archivo PDF.');
         }
 
-        // Lee el parámetro exacto 'pagesToDelete' enviado por tu delete.js
         const rawPages = req.body.pagesToDelete || req.body.pages || '';
         const pagesToDelete = rawPages
             .toString()
