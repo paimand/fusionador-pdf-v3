@@ -189,9 +189,9 @@ app.post('/split', upload.any(), async (req, res) => {
 });
 
 // ==========================================
-// 3. ENDPOINT: ELIMINAR PÁGINAS (/delete-pages)
+// 3. ENDPOINT: ELIMINAR PÁGINAS (/delete)
 // ==========================================
-app.post('/delete-pages', upload.single('file'), async (req, res) => {
+app.post('/delete', upload.single('file'), async (req, res) => {
     try {
         if (!req.file) {
             return res.status(400).send('No se ha subido ningún archivo.');
@@ -226,7 +226,7 @@ app.post('/delete-pages', upload.single('file'), async (req, res) => {
         res.setHeader('Content-Disposition', 'attachment; filename="documento_modificado.pdf"');
         res.send(Buffer.from(pdfBytes));
     } catch (error) {
-        console.error('Error en /delete-pages:', error);
+        console.error('Error en /delete:', error);
         res.status(500).send('Error eliminando páginas del PDF: ' + error.message);
     }
 });
