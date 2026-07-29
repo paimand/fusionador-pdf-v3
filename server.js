@@ -176,4 +176,60 @@ app.post('/split', upload.any(), async (req, res) => {
 // ============================================================
 app.post('/delete', upload.any(), async (req, res) => {
     try {
-        const file = req.files
+        const file = req.files && req.files[0];
+        if (!file) {
+            return res.status(400).send('No se ha subido ningún archivo PDF.');
+        }
+
+        let pagesToDelete = [];
+        if (req.body.pages) {
+            try {
+                pagesToDelete = JSON.parse(req.body.pages);
+            } catch (_) {
+                pagesToDelete = req.body.pages.split(',').map(p => parseInt(p.trim(), 10)).filter(p => !isNaN(p));
+            }
+        }
+
+        if (!Array.isArray(pagesToDelete) || pagesToDelete.length === 0) {
+            return res.status(400).send('No se han especificado páginas válidas para eliminar.');
+        }
+
+        const cleanedBuffer = await cleanPdfBuffer(file.buffer);
+        const srcPdf = await PDFDocument.load(cleanedBuffer, { ignoreEncryption: true });
+        const totalPages = srcPdf.getPageCount();
+
+        const keepIndices = [];
+        for (let i = 1; i <= totalPages; i++) {
+            if (!pagesToDelete.includes(i)) {
+                keepIndices.push(i - 1);
+            }
+        }
+
+        if (keepIndices.length === 0) {
+            return res.status(400).send('No puedes eliminar todas las páginas del documento.');
+        }
+
+        const newPdf = await PDFDocument.create();
+        const copiedPages = await newPdf.copyPages(srcPdf, keepIndices);
+        copiedPages.forEach(page => newPdf.addPage(page));
+
+        const pdfBytes = await newPdf.save();
+
+        res.setHeader('Content-Type', 'application/pdf');
+        res.setHeader('Content-Disposition', 'attachment; filename="pdf_modificado.pdf"');
+        return res.send(Buffer.from(pdfBytes));
+
+    } catch (error) {
+        console.error('Error en /delete:', error);
+        return res.status(500).send('Error interno al eliminar las páginas: ' + error.message);
+    }
+});
+
+// Fallback final
+app.use((req, res) => {
+    res.status(404).sendFile(path.join(__dirname, 'public', 'index.html'));
+});
+
+app.listen(PORT, () => {
+    console.log(`Servidor corriendo en el puerto ${PORT}`);
+});
