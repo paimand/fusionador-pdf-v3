@@ -11,13 +11,13 @@ const upload = multer({ storage: multer.memoryStorage() });
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// Servir archivos estáticos (HTML, CSS, JS) desde la raíz del proyecto
-app.use(express.static(path.join(__dirname)));
-
+// Servir archivos estáticos (index.html, CSS, JS) desde la raíz del proyecto
+app.use(express.static(__dirname));
 
 // ==========================================
 // 1. ENDPOINT: UNIR PDFs (/merge)
 // ==========================================
+// Usamos upload.any() para aceptar 'pdfFiles' enviado por el frontend sin errores de Multer
 app.post('/merge', upload.any(), async (req, res) => {
     try {
         if (!req.files || req.files.length < 2) {
@@ -245,13 +245,8 @@ app.post('/compress', upload.single('file'), async (req, res) => {
     }
 });
 
-// Manejo de fallback para devolver index.html ante rutas no reconocidas
-app.use((req, res) => {
-    res.status(404).sendFile(path.join(__dirname, 'index.html'));
-});
-
 // Inicialización del servidor
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
-    console.log(`🚀 Servidor ejecutándose en http://localhost:${PORT}`);
+    console.log(`🚀 Servidor ejecutándose en puerto ${PORT}`);
 });
