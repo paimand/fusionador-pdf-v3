@@ -5,13 +5,73 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Extraer Páginas PDF - Suite PDF</title>
     
-    <!-- Librería externa -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
     
-    <!-- Fuentes y estilos -->
     <link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,400;14..32,500;14..32,600;14..32,700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="/css/common.css">
-    <link rel="stylesheet" href="/css/extract.css">
+    <style>
+        .selection-toolbar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 16px;
+        }
+        .btn-link-action {
+            background: none;
+            border: none;
+            color: #2563eb;
+            font-size: 0.85rem;
+            font-weight: 600;
+            cursor: pointer;
+            padding: 4px 8px;
+            border-radius: 4px;
+        }
+        .btn-link-action:hover {
+            background: #eff6ff;
+        }
+
+        .page-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+            gap: 16px;
+            margin-bottom: 24px;
+            max-height: 480px;
+            overflow-y: auto;
+            padding: 12px;
+            background: #f8fafc;
+            border-radius: 12px;
+            border: 1px solid #e2e8f0;
+        }
+        .page-card {
+            border: 2px solid #cbd5e1;
+            border-radius: 8px;
+            padding: 8px;
+            background: #fff;
+            cursor: pointer;
+            text-align: center;
+            transition: all 0.2s ease;
+            position: relative;
+            opacity: 0.6;
+        }
+        .page-card.selected {
+            border-color: #2563eb;
+            background-color: #eff6ff;
+            box-shadow: 0 4px 12px rgba(37, 99, 235, 0.15);
+            opacity: 1;
+        }
+        .page-card canvas {
+            max-width: 100%;
+            height: auto;
+            border-radius: 4px;
+            display: block;
+            margin: 0 auto 6px;
+        }
+        .page-card span {
+            font-size: 0.8rem;
+            font-weight: 600;
+            color: #334155;
+        }
+    </style>
 </head>
 <body>
 
@@ -19,39 +79,185 @@
     
     <div class="container">
         <header class="tool-header">
-            <h1>Extraer Páginas PDF</h1>
-            <p>Selecciona las páginas que deseas extraer para crear un nuevo documento PDF.</p>
+            <a href="/" class="btn-back" style="text-decoration:none; color:#64748b; font-size:0.9rem; font-weight:500;">← Volver al inicio</a>
+            <h1 style="margin-top:10px;">Extraer Páginas PDF</h1>
+            <p>Selecciona las páginas que deseas extraer en un nuevo documento PDF único.</p>
         </header>
 
-        <!-- Área de subida -->
         <div class="upload-area" id="dropZoneExtract">
-            <p>Arrastra o selecciona un PDF para extraer páginas</p>
+            <p>Arrastra o selecciona tu archivo PDF aquí</p>
             <input type="file" id="fileInputExtract" accept=".pdf">
         </div>
 
-        <!-- Previsualización de páginas -->
-        <div id="extractPreview" style="display:none; margin-bottom:16px;">
-            <div class="grid-controls" style="margin-bottom: 12px;">
-                <button id="extractSelectAll" class="btn btn-secondary" style="padding:6px 14px;">Marcar todas</button>
-                <button id="extractDeselectAll" class="btn btn-secondary" style="padding:6px 14px;">Desmarcar todas</button>
-            </div>
-            <div id="extractPageGrid" class="page-grid"></div>
-        </div>
+        <div id="extractWorkspace" style="display:none; margin-top:20px;">
+            <p id="selectedFileName" style="font-weight:600; margin-bottom:16px; color:#1e293b;"></p>
 
-        <!-- Acciones -->
-        <div class="actions">
-            <button id="extractBtn" class="btn btn-primary">Extraer Páginas</button>
+            <div class="selection-toolbar">
+                <p style="font-size:0.85rem; color:#64748b; margin:0;">Haz clic en las páginas que deseas extraer:</p>
+                <div>
+                    <button type="button" class="btn-link-action" onclick="selectAllPages(true)">Seleccionar todas</button>
+                    <button type="button" class="btn-link-action" onclick="selectAllPages(false)">Desmarcar todas</button>
+                </div>
+            </div>
+
+            <div id="extractGrid" class="page-grid"></div>
+
+            <div class="actions" style="margin-top:24px;">
+                <button id="extractBtn" class="btn btn-primary" style="width:100%;">Extraer Páginas Seleccionadas</button>
+            </div>
+            
+            <div id="extractStatus" style="margin-top:12px;"></div>
         </div>
-        
-        <div id="extractStatus" style="margin-top:12px;"></div>
-        <div id="loading" style="display:none;">⏳ Procesando...</div>
     </div>
 
     <div id="app-footer"></div>
 
-    <!-- Scripts modularizados -->
     <script src="/js/common.js"></script>
-    <script src="/js/extract.js"></script>
-    
+    <script>
+        if (typeof pdfjsLib !== 'undefined') {
+            pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+        }
+
+        let extractFile = null;
+        let pdfDocInstance = null;
+        let pdfTotalPages = 1;
+        let selectedPagesSet = new Set();
+
+        setupDropZone('dropZoneExtract', 'fileInputExtract', async files => {
+            if (!files || files.length === 0) return;
+            
+            extractFile = files[0];
+            document.getElementById('selectedFileName').textContent = `📄 Documento: ${extractFile.name}`;
+            
+            try {
+                if (typeof showLoading === 'function') showLoading(true);
+
+                const arrayBuffer = await extractFile.arrayBuffer();
+                const typedarray = new Uint8Array(arrayBuffer);
+
+                pdfDocInstance = await pdfjsLib.getDocument({ data: typedarray }).promise;
+                pdfTotalPages = pdfDocInstance.numPages;
+
+                selectedPagesSet.clear();
+
+                document.getElementById('extractWorkspace').style.display = 'block';
+                document.getElementById('dropZoneExtract').style.display = 'none';
+
+                await renderExtractGrid();
+            } catch(e) {
+                console.error("Error al cargar PDF:", e);
+                alert('Error leyendo el archivo PDF: ' + e.message);
+            } finally {
+                if (typeof showLoading === 'function') showLoading(false);
+            }
+        });
+
+        async function renderExtractGrid() {
+            const grid = document.getElementById('extractGrid');
+            grid.innerHTML = '';
+
+            for (let i = 1; i <= pdfTotalPages; i++) {
+                const isSelected = selectedPagesSet.has(i);
+                const card = document.createElement('div');
+                card.className = `page-card ${isSelected ? 'selected' : ''}`;
+                card.id = `ext_card_${i}`;
+                
+                const canvas = document.createElement('canvas');
+                const span = document.createElement('span');
+                span.textContent = `Pág. ${i}`;
+
+                card.appendChild(canvas);
+                card.appendChild(span);
+
+                card.addEventListener('click', () => {
+                    if (selectedPagesSet.has(i)) {
+                        selectedPagesSet.delete(i);
+                        card.classList.remove('selected');
+                    } else {
+                        selectedPagesSet.add(i);
+                        card.classList.add('selected');
+                    }
+                });
+
+                grid.appendChild(card);
+                renderPageMiniature(i, canvas, 0.2);
+            }
+        }
+
+        function selectAllPages(select) {
+            selectedPagesSet.clear();
+            for (let i = 1; i <= pdfTotalPages; i++) {
+                const card = document.getElementById(`ext_card_${i}`);
+                if (select) {
+                    selectedPagesSet.add(i);
+                    if (card) card.classList.add('selected');
+                } else {
+                    if (card) card.classList.remove('selected');
+                }
+            }
+        }
+
+        async function renderPageMiniature(pageNum, canvas, scale) {
+            if (!pdfDocInstance) return;
+            try {
+                const page = await pdfDocInstance.getPage(pageNum);
+                const viewport = page.getViewport({ scale });
+                const ctx = canvas.getContext('2d');
+                canvas.width = viewport.width;
+                canvas.height = viewport.height;
+                await page.render({ canvasContext: ctx, viewport }).promise;
+            } catch (err) {
+                console.error(`Error renderizando página ${pageNum}:`, err);
+            }
+        }
+
+        document.getElementById('extractBtn').addEventListener('click', async () => {
+            if (!extractFile) return;
+
+            const extractBtn = document.getElementById('extractBtn');
+            const sortedPages = Array.from(selectedPagesSet).sort((a, b) => a - b);
+
+            if (sortedPages.length === 0) {
+                alert('Por favor, selecciona al menos una página para extraer.');
+                return;
+            }
+
+            extractBtn.disabled = true;
+            if (typeof showLoading === 'function') showLoading(true);
+
+            try {
+                const formData = new FormData();
+                formData.append('file', extractFile);
+                formData.append('pages', sortedPages.join(','));
+
+                const resp = await fetch('/extract', { method: 'POST', body: formData });
+                if (!resp.ok) {
+                    const errText = await resp.text();
+                    throw new Error(errText);
+                }
+
+                const blob = await resp.blob();
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = 'paginas_extraidas.pdf';
+                document.body.appendChild(a);
+                a.click();
+                a.remove();
+                window.URL.revokeObjectURL(url);
+                
+                if (typeof showStatus === 'function') showStatus('extractStatus', '✅ Páginas extraídas con éxito');
+            } catch (err) {
+                if (typeof showStatus === 'function') {
+                    showStatus('extractStatus', '❌ ' + err.message, true);
+                } else {
+                    alert('Error: ' + err.message);
+                }
+            } finally {
+                extractBtn.disabled = false;
+                if (typeof showLoading === 'function') showLoading(false);
+            }
+        });
+    </script>
 </body>
 </html>
