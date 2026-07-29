@@ -50,11 +50,13 @@
             <p>Divide un PDF en partes seleccionando páginas o rangos.</p>
         </header>
 
+        <!-- Área de subida -->
         <div class="upload-area" id="dropZoneSplit">
             <p>Arrastra o selecciona un PDF para dividir</p>
             <input type="file" id="fileInputSplit" accept=".pdf">
         </div>
 
+        <!-- Opciones de modo -->
         <div style="margin: 16px 0;">
             <label>
                 <input type="radio" name="splitMode" value="individual" checked> Dividir en páginas individuales
@@ -64,6 +66,7 @@
             </label>
         </div>
 
+        <!-- Vista previa de cuadrícula -->
         <div id="splitPreview" style="display:none; margin-bottom:16px;">
             <div class="grid-controls" style="margin-bottom: 12px;">
                 <button id="splitSelectAll" class="btn btn-secondary" style="padding:6px 14px;">Seleccionar todas</button>
@@ -72,161 +75,26 @@
             <div id="splitPageGrid" class="page-grid"></div>
         </div>
 
+        <!-- Entrada de rangos opcional -->
         <div id="splitRangesContainer" style="display:none; margin-bottom:16px;">
             <label for="splitRanges">Rangos (ej. 1,3-5,7):</label>
             <input type="text" id="splitRanges" placeholder="Ej: 1,3-5,7" style="width:100%;padding:8px;border:1px solid #ccc;border-radius:6px;margin-top:6px;">
         </div>
 
+        <!-- Acciones -->
         <div class="actions">
             <button id="splitBtn" class="btn btn-primary">Dividir</button>
         </div>
+        
         <div id="splitStatus" style="margin-top:12px;"></div>
         <div id="loading" style="display:none;">⏳ Procesando...</div>
     </div>
 
     <div id="app-footer"></div>
 
+    <!-- Scripts modularizados -->
     <script src="/js/common.js"></script>
-    <script>
-        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
-
-        let splitFile = null;
-        let splitSelections = [];
-        const splitBtn = document.getElementById('splitBtn');
-        const splitRangesInput = document.getElementById('splitRanges');
-        const splitRangesContainer = document.getElementById('splitRangesContainer');
-        const splitPreview = document.getElementById('splitPreview');
-        const gridContainer = document.getElementById('splitPageGrid');
-
-        document.querySelectorAll('input[name="splitMode"]').forEach(radio => {
-            radio.addEventListener('change', () => {
-                const isRanges = radio.value === 'ranges';
-                splitRangesContainer.style.display = isRanges ? 'block' : 'none';
-                splitPreview.style.display = (isRanges || !splitFile) ? 'none' : 'block';
-            });
-        });
-
-        setupDropZone('dropZoneSplit', 'fileInputSplit', files => {
-            if (files && files[0]) {
-                splitFile = files[0];
-                document.querySelector('#dropZoneSplit p').textContent = `📄 ${splitFile.name}`;
-                loadAndRenderPdf(splitFile);
-            }
-        });
-
-        async function loadAndRenderPdf(file) {
-            gridContainer.innerHTML = '<p style="font-size:0.9rem; color:#6b7280;">Cargando miniaturas...</p>';
-            splitPreview.style.display = 'block';
-
-            try {
-                const arrayBuffer = await file.arrayBuffer();
-                const pdfDoc = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
-                const numPages = pdfDoc.numPages;
-
-                splitSelections = new Array(numPages).fill(true);
-                gridContainer.innerHTML = '';
-
-                for (let i = 1; i <= numPages; i++) {
-                    const page = await pdfDoc.getPage(i);
-                    const viewport = page.getViewport({ scale: 0.25 });
-
-                    const card = document.createElement('div');
-                    card.className = 'page-card selected';
-                    card.dataset.pageIndex = i - 1;
-
-                    const canvas = document.createElement('canvas');
-                    const ctx = canvas.getContext('2d');
-                    canvas.height = viewport.height;
-                    canvas.width = viewport.width;
-
-                    await page.render({ canvasContext: ctx, viewport: viewport }).promise;
-
-                    const label = document.createElement('span');
-                    label.textContent = `Pág. ${i}`;
-
-                    card.appendChild(canvas);
-                    card.appendChild(label);
-
-                    card.addEventListener('click', () => {
-                        const idx = parseInt(card.dataset.pageIndex);
-                        splitSelections[idx] = !splitSelections[idx];
-                        card.classList.toggle('selected', splitSelections[idx]);
-                    });
-
-                    gridContainer.appendChild(card);
-                }
-            } catch (err) {
-                console.error('Error al generar miniaturas:', err);
-                gridContainer.innerHTML = '<p style="color:red;">Error al cargar las miniaturas del PDF.</p>';
-            }
-        }
-
-        document.getElementById('splitSelectAll').addEventListener('click', () => {
-            splitSelections.fill(true);
-            document.querySelectorAll('.page-card').forEach(card => card.classList.add('selected'));
-        });
-
-        document.getElementById('splitDeselectAll').addEventListener('click', () => {
-            splitSelections.fill(false);
-            document.querySelectorAll('.page-card').forEach(card => card.classList.remove('selected'));
-        });
-
-        splitBtn.addEventListener('click', async () => {
-            if (!splitFile) { alert('Primero selecciona un PDF'); return; }
-            const mode = document.querySelector('input[name="splitMode"]:checked').value;
-            let pagesToSend = '';
-            
-            if (mode === 'individual') {
-                const selectedIndices = splitSelections.map((sel, idx) => sel ? idx + 1 : null).filter(v => v !== null);
-                if (selectedIndices.length === 0) { alert('Selecciona al menos una página'); return; }
-                pagesToSend = selectedIndices.join(',');
-            } else {
-                pagesToSend = splitRangesInput.value.trim();
-                if (!pagesToSend) { alert('Introduce rangos válidos'); return; }
-            }
-            
-            splitBtn.disabled = true;
-            if (typeof showLoading === 'function') showLoading(true);
-            
-            try {
-                const formData = new FormData();
-                formData.append('file', splitFile);
-                formData.append('mode', mode);
-                formData.append('ranges', pagesToSend);
-                
-                const resp = await fetch('/split', { method: 'POST', body: formData });
-                if (!resp.ok) {
-                    const errText = await resp.text();
-                    throw new Error(errText);
-                }
-
-                const contentType = resp.headers.get('content-type') || '';
-                const isZip = contentType.includes('application/zip');
-                const defaultFilename = isZip ? 'paginas_divididas.zip' : 'documento_dividido.pdf';
-
-                const blob = await resp.blob();
-                const url = window.URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = defaultFilename;
-                document.body.appendChild(a);
-                a.click();
-                a.remove();
-                window.URL.revokeObjectURL(url);
-                
-                if (typeof showStatus === 'function') showStatus('splitStatus', '✅ División completada');
-            } catch (err) {
-                if (typeof showStatus === 'function') {
-                    showStatus('splitStatus', '❌ ' + err.message, true);
-                } else {
-                    alert('Error: ' + err.message);
-                }
-            } finally {
-                splitBtn.disabled = false;
-                if (typeof showLoading === 'function') showLoading(false);
-            }
-        });
-    </script>
+    <script src="/js/split.js"></script>
 
 </body>
 </html>
