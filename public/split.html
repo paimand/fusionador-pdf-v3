@@ -22,6 +22,7 @@
             padding: 16px;
             cursor: pointer;
             transition: all 0.2s ease;
+            background: #fff;
         }
         .option-card.active {
             border-color: #2563eb;
@@ -37,7 +38,48 @@
             color: #64748b;
         }
 
-        /* Bloque de rangos */
+        /* VISTA DE MINIATURAS (INDIVIDUAL) */
+        .page-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+            gap: 16px;
+            margin-bottom: 24px;
+            max-height: 480px;
+            overflow-y: auto;
+            padding: 12px;
+            background: #f8fafc;
+            border-radius: 12px;
+            border: 1px solid #e2e8f0;
+        }
+        .page-card {
+            border: 2px solid #cbd5e1;
+            border-radius: 8px;
+            padding: 8px;
+            background: #fff;
+            cursor: pointer;
+            text-align: center;
+            transition: all 0.2s ease;
+            position: relative;
+        }
+        .page-card.selected {
+            border-color: #2563eb;
+            background-color: #eff6ff;
+            box-shadow: 0 4px 12px rgba(37, 99, 235, 0.15);
+        }
+        .page-card canvas {
+            max-width: 100%;
+            height: auto;
+            border-radius: 4px;
+            display: block;
+            margin: 0 auto 6px;
+        }
+        .page-card span {
+            font-size: 0.8rem;
+            font-weight: 600;
+            color: #334155;
+        }
+
+        /* BLOQUES DE RANGOS DINÁMICOS */
         .ranges-container {
             background: #f8fafc;
             border: 1px solid #e2e8f0;
@@ -48,18 +90,25 @@
         .range-item {
             background: #fff;
             border: 1px solid #cbd5e1;
-            border-radius: 8px;
-            padding: 12px 16px;
-            margin-bottom: 12px;
+            border-radius: 10px;
+            padding: 16px;
+            margin-bottom: 16px;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.02);
+        }
+        .range-header {
             display: flex;
             align-items: center;
             justify-content: space-between;
             gap: 12px;
+            margin-bottom: 12px;
         }
         .range-inputs {
             display: flex;
             align-items: center;
             gap: 8px;
+            font-size: 0.9rem;
+            font-weight: 500;
+            color: #1e293b;
         }
         .range-inputs input {
             width: 70px;
@@ -77,12 +126,44 @@
             font-size: 1.2rem;
             padding: 4px 8px;
         }
+        
+        /* PREVISUALIZACIÓN DE MINIATURAS EN RANGOS */
+        .range-thumbnails {
+            display: flex;
+            gap: 10px;
+            overflow-x: auto;
+            padding: 8px 4px;
+            background: #f1f5f9;
+            border-radius: 8px;
+            min-height: 80px;
+            align-items: center;
+        }
+        .thumb-mini-card {
+            flex: 0 0 auto;
+            text-align: center;
+            background: #fff;
+            border: 1px solid #cbd5e1;
+            border-radius: 4px;
+            padding: 4px;
+            width: 70px;
+        }
+        .thumb-mini-card canvas {
+            width: 100%;
+            height: auto;
+            display: block;
+        }
+        .thumb-mini-card span {
+            font-size: 0.7rem;
+            font-weight: 600;
+            color: #475569;
+        }
+
         .btn-add-range {
             background: #e2e8f0;
             border: none;
             color: #1e293b;
-            padding: 8px 16px;
-            border-radius: 6px;
+            padding: 10px 18px;
+            border-radius: 8px;
             font-weight: 600;
             cursor: pointer;
             font-size: 0.85rem;
@@ -113,8 +194,9 @@
     
     <div class="container">
         <header class="tool-header">
-            <h1>Dividir PDF</h1>
-            <p>Divide un PDF en múltiples archivos o extrae rangos específicos.</p>
+            <a href="/" class="btn-back" style="text-decoration:none; color:#64748b; font-size:0.9rem; font-weight:500;">← Volver al inicio</a>
+            <h1 style="margin-top:10px;">Dividir PDF</h1>
+            <p>Divide un PDF en páginas sueltas o extrae rangos con vista previa visual.</p>
         </header>
 
         <div class="upload-area" id="dropZoneSplit">
@@ -127,13 +209,18 @@
 
             <div class="split-options">
                 <div class="option-card active" id="modeIndividual" onclick="selectMode('individual')">
-                    <h3>Dividir en páginas individuales</h3>
-                    <p>Cada página se guardará en un PDF separado (.ZIP)</p>
+                    <h3>Páginas individuales</h3>
+                    <p>Selecciona las páginas que deseas extraer (.ZIP)</p>
                 </div>
                 <div class="option-card" id="modeRanges" onclick="selectMode('range')">
                     <h3>Dividir por rangos</h3>
-                    <p>Define rangos personalizados de páginas</p>
+                    <p>Crea bloques de páginas con vista previa</p>
                 </div>
+            </div>
+
+            <div id="individualSection">
+                <p style="font-size:0.85rem; color:#64748b; margin-bottom:8px;">Haz clic en las páginas para activarlas o desactivarlas:</p>
+                <div id="individualGrid" class="page-grid"></div>
             </div>
 
             <div id="rangesSection" class="ranges-container" style="display:none;">
@@ -147,7 +234,7 @@
                 </div>
             </div>
 
-            <div class="actions">
+            <div class="actions" style="margin-top:24px;">
                 <button id="splitBtn" class="btn btn-primary" style="width:100%;">Dividir PDF</button>
             </div>
             
@@ -159,30 +246,38 @@
 
     <script src="/js/common.js"></script>
     <script>
-        let selectedFile = null;
-        let pdfTotalPages = 1;
-        let currentMode = 'individual'; // 'individual' o 'range'
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
 
-        // Inicializar Dropzone
+        let selectedFile = null;
+        let pdfDocInstance = null;
+        let pdfTotalPages = 1;
+        let currentMode = 'individual'; 
+        let selectedPagesSet = new Set(); // Para modo individual
+
+        // Inicializar DropZone
         setupDropZone('dropZoneSplit', 'fileInputSplit', async files => {
             if (files && files[0]) {
                 selectedFile = files[0];
                 document.getElementById('selectedFileName').textContent = `📄 Documento: ${selectedFile.name}`;
                 
-                // Obtener total de páginas
                 try {
                     const buffer = await selectedFile.arrayBuffer();
-                    const pdf = await pdfjsLib.getDocument({ data: buffer }).promise;
-                    pdfTotalPages = pdf.numPages;
+                    pdfDocInstance = await pdfjsLib.getDocument({ data: buffer }).promise;
+                    pdfTotalPages = pdfDocInstance.numPages;
+                    
+                    // Seleccionar todas por defecto en modo individual
+                    selectedPagesSet.clear();
+                    for (let i = 1; i <= pdfTotalPages; i++) selectedPagesSet.add(i);
+
+                    document.getElementById('splitWorkspace').style.display = 'block';
+                    document.getElementById('dropZoneSplit').style.display = 'none';
+
+                    // Cargar Vistas
+                    renderIndividualGrid();
+                    resetRanges();
                 } catch(e) {
-                    pdfTotalPages = 1;
+                    alert('Error leyendo el archivo PDF: ' + e.message);
                 }
-
-                document.getElementById('splitWorkspace').style.display = 'block';
-                document.getElementById('dropZoneSplit').style.display = 'none';
-
-                // Inicializar rangos por defecto
-                resetRanges();
             }
         });
 
@@ -191,14 +286,53 @@
             if (mode === 'individual') {
                 document.getElementById('modeIndividual').classList.add('active');
                 document.getElementById('modeRanges').classList.remove('active');
+                document.getElementById('individualSection').style.display = 'block';
                 document.getElementById('rangesSection').style.display = 'none';
             } else {
                 document.getElementById('modeRanges').classList.add('active');
                 document.getElementById('modeIndividual').classList.remove('active');
+                document.getElementById('individualSection').style.display = 'none';
                 document.getElementById('rangesSection').style.display = 'block';
             }
         }
 
+        // ============================================================
+        // RENDERIZAR GRID INDIVIDUAL
+        // ============================================================
+        async function renderIndividualGrid() {
+            const grid = document.getElementById('individualGrid');
+            grid.innerHTML = '';
+
+            for (let i = 1; i <= pdfTotalPages; i++) {
+                const card = document.createElement('div');
+                card.className = 'page-card selected';
+                card.id = `ind_card_${i}`;
+                
+                const canvas = document.createElement('canvas');
+                const span = document.createElement('span');
+                span.textContent = `Pág. ${i}`;
+
+                card.appendChild(canvas);
+                card.appendChild(span);
+
+                card.addEventListener('click', () => {
+                    if (selectedPagesSet.has(i)) {
+                        selectedPagesSet.delete(i);
+                        card.classList.remove('selected');
+                    } else {
+                        selectedPagesSet.add(i);
+                        card.classList.add('selected');
+                    }
+                });
+
+                grid.appendChild(card);
+                renderPageMiniature(i, canvas, 0.2);
+            }
+        }
+
+        // ============================================================
+        // GESTIÓN DE RANGOS DINÁMICOS
+        // ============================================================
         function resetRanges() {
             const list = document.getElementById('rangesList');
             list.innerHTML = '';
@@ -207,22 +341,41 @@
 
         function addRangeRow(from = 1, to = pdfTotalPages) {
             const list = document.getElementById('rangesList');
-            const rangeId = Date.now() + Math.random().toString(36).substring(7);
+            const rangeId = 'r_' + Math.random().toString(36).substring(2, 9);
 
             const row = document.createElement('div');
             row.className = 'range-item';
-            row.id = `range_${rangeId}`;
+            row.id = rangeId;
             row.innerHTML = `
-                <div class="range-inputs">
-                    <span>Rango ${list.children.length + 1}: Desde página</span>
-                    <input type="number" class="range-from" min="1" max="${pdfTotalPages}" value="${from}">
-                    <span>hasta página</span>
-                    <input type="number" class="range-to" min="1" max="${pdfTotalPages}" value="${to}">
+                <div class="range-header">
+                    <div class="range-inputs">
+                        <span class="range-title">Rango ${list.children.length + 1}: Desde</span>
+                        <input type="number" class="range-from" min="1" max="${pdfTotalPages}" value="${from}">
+                        <span>hasta</span>
+                        <input type="number" class="range-to" min="1" max="${pdfTotalPages}" value="${to}">
+                    </div>
+                    <button type="button" class="btn-remove-range" onclick="removeRangeRow('${rangeId}')">✕</button>
                 </div>
-                <button type="button" class="btn-remove-range" onclick="removeRangeRow('range_${rangeId}')">✕</button>
+                <div class="range-thumbnails" id="thumbs_${rangeId}"></div>
             `;
             list.appendChild(row);
+
+            const fromInput = row.querySelector('.range-from');
+            const toInput = row.querySelector('.range-to');
+
+            const updateThumbs = () => {
+                let f = parseInt(fromInput.value, 10) || 1;
+                let t = parseInt(toInput.value, 10) || pdfTotalPages;
+                f = Math.max(1, Math.min(pdfTotalPages, f));
+                t = Math.max(1, Math.min(pdfTotalPages, t));
+                renderRangeThumbnails(`thumbs_${rangeId}`, f, t);
+            };
+
+            fromInput.addEventListener('change', updateThumbs);
+            toInput.addEventListener('change', updateThumbs);
+
             updateRangeTitles();
+            updateThumbs();
         }
 
         function removeRangeRow(id) {
@@ -234,12 +387,53 @@
         function updateRangeTitles() {
             const items = document.querySelectorAll('.range-item');
             items.forEach((item, index) => {
-                const labelSpan = item.querySelector('.range-inputs span');
-                if (labelSpan) labelSpan.textContent = `Rango ${index + 1}: Desde página`;
+                const titleSpan = item.querySelector('.range-title');
+                if (titleSpan) titleSpan.textContent = `Rango ${index + 1}: Desde`;
             });
         }
 
-        // PROCESAR DIVISIÓN
+        async function renderRangeThumbnails(containerId, start, end) {
+            const container = document.getElementById(containerId);
+            if (!container) return;
+            container.innerHTML = '';
+
+            const pStart = Math.min(start, end);
+            const pEnd = Math.max(start, end);
+
+            for (let i = pStart; i <= pEnd; i++) {
+                const mini = document.createElement('div');
+                mini.className = 'thumb-mini-card';
+                
+                const canvas = document.createElement('canvas');
+                const span = document.createElement('span');
+                span.textContent = `Pág ${i}`;
+
+                mini.appendChild(canvas);
+                mini.appendChild(span);
+                container.appendChild(mini);
+
+                renderPageMiniature(i, canvas, 0.15);
+            }
+        }
+
+        // Helper para renderizar miniaturas con PDF.js
+        async function renderPageMiniature(pageNum, canvas, scale) {
+            if (!pdfDocInstance) return;
+            try {
+                const page = await pdfDocInstance.getPage(pageNum);
+                const viewport = page.getViewport({ scale });
+                const ctx = canvas.getContext('2d');
+                canvas.width = viewport.width;
+                canvas.height = viewport.height;
+                await page.render({ canvasContext: ctx, viewport }).promise;
+            } catch (err) {
+                console.error(`Error renderizando página ${pageNum}:`, err);
+            }
+        }
+
+        // ============================================================
+        // PROCESAR DIVISIÓN AL SERVIDOR
+        // ============================================================
         document.getElementById('splitBtn').addEventListener('click', async () => {
             if (!selectedFile) return;
 
@@ -250,60 +444,13 @@
             try {
                 const formData = new FormData();
                 formData.append('file', selectedFile);
-                formData.append('mode', currentMode);
 
-                if (currentMode === 'range') {
-                    const items = document.querySelectorAll('.range-item');
-                    const rangesArray = [];
-
-                    items.forEach(item => {
-                        const from = item.querySelector('.range-from').value;
-                        const to = item.querySelector('.range-to').value;
-                        if (from && to) {
-                            rangesArray.push(`${from}-${to}`);
-                        }
-                    });
-
-                    if (rangesArray.length === 0) {
-                        throw new Error('Debes definir al menos un rango de páginas.');
+                if (currentMode === 'individual') {
+                    formData.append('mode', 'individual');
+                    const sortedPages = Array.from(selectedPagesSet).sort((a, b) => a - b);
+                    if (sortedPages.length === 0) {
+                        throw new Error('Debes seleccionar al menos una página para dividir.');
                     }
-
-                    formData.append('ranges', rangesArray.join(','));
-                    formData.append('mergeRanges', document.getElementById('mergeRangesCheck').checked);
-                }
-
-                const resp = await fetch('/split', { method: 'POST', body: formData });
-                if (!resp.ok) {
-                    const errText = await resp.text();
-                    throw new Error(errText);
-                }
-
-                const contentType = resp.headers.get('content-type') || '';
-                const isZip = contentType.includes('application/zip');
-                const defaultFilename = isZip ? 'rangos_divididos.zip' : 'rangos_unidos.pdf';
-
-                const blob = await resp.blob();
-                const url = window.URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = defaultFilename;
-                document.body.appendChild(a);
-                a.click();
-                a.remove();
-                window.URL.revokeObjectURL(url);
-                
-                if (typeof showStatus === 'function') showStatus('splitStatus', '✅ Operación completada con éxito');
-            } catch (err) {
-                if (typeof showStatus === 'function') {
-                    showStatus('splitStatus', '❌ ' + err.message, true);
+                    formData.append('ranges', sortedPages.join(','));
                 } else {
-                    alert('Error: ' + err.message);
-                }
-            } finally {
-                splitBtn.disabled = false;
-                if (typeof showLoading === 'function') showLoading(false);
-            }
-        });
-    </script>
-</body>
-</html>
+                    formData.append('mode', '
