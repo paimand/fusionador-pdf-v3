@@ -47,6 +47,10 @@ app.get('/delete.html', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'delete.html'));
 });
 
+app.get('/reorder.html', (req, res) => {
+    res.sendFile(path.join(__dirname, 'public', 'reorder.html'));
+});
+
 // ============================================================
 // 1. ENDPOINT: UNIR PDFs (/merge)
 // ============================================================
@@ -76,7 +80,7 @@ app.post('/merge', upload.any(), async (req, res) => {
 });
 
 // ============================================================
-// 2. ENDPOINT CORREGIDO: DIVIDIR / EXTRAER PDF (/split)
+// 2. ENDPOINT: DIVIDIR / EXTRAER PDF (/split)
 // ============================================================
 app.post('/split', upload.single('file'), async (req, res) => {
     try {
@@ -90,7 +94,6 @@ app.post('/split', upload.single('file'), async (req, res) => {
         const srcPdf = await PDFDocument.load(file.buffer, { ignoreEncryption: true });
         const totalPages = srcPdf.getPageCount();
 
-        // Obtener la lista de páginas numéricas a extraer
         let pagesToExtract = [];
 
         if (mode === 'individual') {
@@ -98,7 +101,6 @@ app.post('/split', upload.single('file'), async (req, res) => {
                 .map(n => parseInt(n.trim(), 10))
                 .filter(n => !isNaN(n) && n >= 1 && n <= totalPages);
         } else {
-            // Manejo de rangos (ej. "1-3, 5")
             const groups = rangesStr.split(',').map(s => s.trim()).filter(Boolean);
             for (const group of groups) {
                 if (group.includes('-')) {
@@ -113,14 +115,12 @@ app.post('/split', upload.single('file'), async (req, res) => {
             }
         }
 
-        // Eliminar duplicados y ordenar
         pagesToExtract = [...new Set(pagesToExtract)].sort((a, b) => a - b);
 
         if (pagesToExtract.length === 0) {
             return res.status(400).send('No se han especificado páginas válidas.');
         }
 
-        // Crear un nuevo documento PDF con la selección
         const newPdf = await PDFDocument.create();
         const pageIndices = pagesToExtract.map(p => p - 1);
         const copiedPages = await newPdf.copyPages(srcPdf, pageIndices);
@@ -139,7 +139,51 @@ app.post('/split', upload.single('file'), async (req, res) => {
 });
 
 // ============================================================
-// 3. ENDPOINT: COMPRESIÓN ULTRARRÁPIDA (/compress)
+// 3. ENDPOINT: REORDENAR PÁGINAS PDF (/reorder)
+// ============================================================
+app.post('/reorder', upload.single('file'), async (req, res) => {
+    try {
+        const file = req.file || (req.files && req.files[0]);
+        if (!file) {
+            return res.status(400).send('No se ha recibido ningún archivo PDF.');
+        }
+
+        const pageOrderStr = req.body.order || '';
+        const srcPdf = await PDFDocument.load(file.buffer, { ignoreEncryption: true });
+        const totalPages = srcPdf.getPageCount();
+
+        // Convertir la secuencia a índices base-0 respetando estrictamente el orden recibido
+        const pageIndices = pageOrderStr
+            .split(',')
+            .map(n => parseInt(n.trim(), 10) - 1)
+            .filter(idx => !isNaN(idx) && idx >= 0 && idx < totalPages);
+
+        if (pageIndices.length === 0) {
+            return res.status(400).send('No se ha recibido una secuencia de orden válida.');
+        }
+
+        const newPdf = await PDFDocument.create();
+
+        // Copiar página por página en la secuencia exacta elegida
+        for (const idx of pageIndices) {
+            const [copiedPage] = await newPdf.copyPages(srcPdf, [idx]);
+            newPdf.addPage(copiedPage);
+        }
+
+        const pdfBytes = await newPdf.save();
+
+        res.setHeader('Content-Type', 'application/pdf');
+        res.setHeader('Content-Disposition', 'attachment; filename="pdf_reordenado.pdf"');
+        return res.send(Buffer.from(pdfBytes));
+
+    } catch (error) {
+        console.error('Error en /reorder:', error);
+        return res.status(500).send('Error al reordenar las páginas: ' + error.message);
+    }
+});
+
+// ============================================================
+// 4. ENDPOINT: COMPRESIÓN ULTRARRÁPIDA (/compress)
 // ============================================================
 app.post('/compress', async (req, res) => {
     try {
@@ -180,7 +224,7 @@ app.post('/compress', async (req, res) => {
 });
 
 // ============================================================
-// 4. ENDPOINT: ELIMINAR PÁGINAS (/delete)
+// 5. ENDPOINT: ELIMINAR PÁGINAS (/delete)
 // ============================================================
 app.post('/delete', upload.any(), async (req, res) => {
     try {
