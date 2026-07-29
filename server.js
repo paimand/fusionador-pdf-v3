@@ -10,11 +10,12 @@ const { exec } = require('child_process');
 const app = express();
 const upload = multer({ storage: multer.memoryStorage() });
 
+// Incrementar el límite de payload para evitar PayloadTooLargeError (Problema 5)
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ limit: '50mb', extended: true }));
 app.use(express.static('public'));
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
 
-// Helper para desencriptar y reparar PDFs bancarios con qpdf
+// Helper para desproteger / limpiar PDFs bancarios con qpdf
 async function cleanPdfBuffer(inputBuffer) {
   return new Promise((resolve) => {
     const tempIn = path.join(os.tmpdir(), `in_${Date.now()}_${Math.random().toString(36).substring(2)}.pdf`);
@@ -35,6 +36,20 @@ async function cleanPdfBuffer(inputBuffer) {
       }
     });
   });
+}
+
+// Helper para parsear números/listas de páginas sin importar el formato enviado
+function parsePageList(input) {
+  if (!input) return [];
+  if (Array.isArray(input)) return input.map(n => parseInt(n, 10)).filter(n => !isNaN(n));
+  if (typeof input === 'string') {
+    try {
+      const parsed = JSON.parse(input);
+      if (Array.isArray(parsed)) return parsed.map(n => parseInt(n, 10)).filter(n => !isNaN(n));
+    } catch (e) {}
+    return input.split(',').map(n => parseInt(n.trim(), 10)).filter(n => !isNaN(n));
+  }
+  return [];
 }
 
 // ------------------------------------------------------------
@@ -76,54 +91,16 @@ app.post('/split', upload.single('file'), async (req, res) => {
 
     const mode = req.body.mode || 'individual';
     const rangesStr = req.body.ranges || req.body.pages || '';
+    const mergeRanges = req.body.mergeRanges === 'true' || req.body.mergeRanges === true;
 
     const cleanedBuffer = await cleanPdfBuffer(req.file.buffer);
     const srcPdf = await PDFDocument.load(cleanedBuffer, { ignoreEncryption: true });
     const totalPages = srcPdf.getPageCount();
 
-    let pageIndices = [];
-
-    if (rangesStr && rangesStr.trim() !== '') {
-      const parts = rangesStr.split(',');
-      for (const part of parts) {
-        if (part.includes('-')) {
-          const [start, end] = part.split('-').map(n => parseInt(n.trim(), 10));
-          if (!isNaN(start) && !isNaN(end)) {
-            for (let i = Math.min(start, end); i <= Math.max(start, end); i++) {
-              if (i >= 1 && i <= totalPages) pageIndices.push(i - 1);
-            }
-          }
-        } else {
-          const pageNum = parseInt(part.trim(), 10);
-          if (!isNaN(pageNum) && pageNum >= 1 && pageNum <= totalPages) {
-            pageIndices.push(pageNum - 1);
-          }
-        }
-      }
-    } else {
-      pageIndices = Array.from({ length: totalPages }, (_, i) => i);
-    }
-
-    if (pageIndices.length === 0) {
-      pageIndices = Array.from({ length: totalPages }, (_, i) => i);
-    }
-
-    // Modo INDIVIDUAL o MÚLTIPLES PÁGINAS DIVIDIDAS -> Archivo ZIP
-    if (mode === 'individual' || (mode === 'all' && pageIndices.length > 1)) {
-      if (pageIndices.length === 1) {
-        const singlePdf = await PDFDocument.create();
-        const [copiedPage] = await singlePdf.copyPages(srcPdf, [pageIndices[0]]);
-        singlePdf.addPage(copiedPage);
-        const pdfBytes = await singlePdf.save();
-
-        res.setHeader('Content-Type', 'application/pdf');
-        res.setHeader('Content-Disposition', `attachment; filename="pagina_${pageIndices[0] + 1}.pdf"`);
-        return res.send(Buffer.from(pdfBytes));
-      }
-
+    // MODO INDIVIDUAL (Sin cambios)
+    if (mode === 'individual') {
       const zip = new JSZip();
-      for (let i = 0; i < pageIndices.length; i++) {
-        const idx = pageIndices[i];
+      for (let idx = 0; idx < totalPages; idx++) {
         const singlePdf = await PDFDocument.create();
         const [copiedPage] = await singlePdf.copyPages(srcPdf, [idx]);
         singlePdf.addPage(copiedPage);
@@ -133,13 +110,58 @@ app.post('/split', upload.single('file'), async (req, res) => {
 
       const zipBuffer = await zip.generateAsync({ type: 'nodebuffer' });
       res.setHeader('Content-Type', 'application/zip');
-      res.setHeader('Content-Disposition', 'attachment; filename="paginas_divididas.zip"');
+      res.setHeader('Content-Disposition', 'attachment; filename="paginas_individuaes.zip"');
       return res.send(zipBuffer);
+    }
 
+    // MODO RANGOS
+    const rangeGroups = [];
+    if (rangesStr && rangesStr.trim() !== '') {
+      const parts = rangesStr.split(',');
+      for (const part of parts) {
+        const groupIndices = [];
+        if (part.includes('-')) {
+          const [start, end] = part.split('-').map(n => parseInt(n.trim(), 10));
+          if (!isNaN(start) && !isNaN(end)) {
+            for (let i = Math.min(start, end); i <= Math.max(start, end); i++) {
+              if (i >= 1 && i <= totalPages) groupIndices.push(i - 1);
+            }
+          }
+        } else {
+          const pageNum = parseInt(part.trim(), 10);
+          if (!isNaN(pageNum) && pageNum >= 1 && pageNum <= totalPages) {
+            groupIndices.push(pageNum - 1);
+          }
+        }
+        if (groupIndices.length > 0) rangeGroups.push(groupIndices);
+      }
+    }
+
+    if (rangeGroups.length === 0) {
+      return res.status(400).send('No se han especificado rangos válidos.');
+    }
+
+    // Si NO se unifican los rangos -> Devolver archivo ZIP con cada rango
+    if (!mergeRanges) {
+      const zip = new JSZip();
+      for (let i = 0; i < rangeGroups.length; i++) {
+        const group = rangeGroups[i];
+        const rangePdf = await PDFDocument.create();
+        const copiedPages = await rangePdf.copyPages(srcPdf, group);
+        copiedPages.forEach(p => rangePdf.addPage(p));
+        const pdfBytes = await rangePdf.save();
+        zip.file(`rango_${i + 1}.pdf`, pdfBytes);
+      }
+
+      const zipBuffer = await zip.generateAsync({ type: 'nodebuffer' });
+      res.setHeader('Content-Type', 'application/zip');
+      res.setHeader('Content-Disposition', 'attachment; filename="rangos_divididos.zip"');
+      return res.send(zipBuffer);
     } else {
-      // Modo RANGO -> Generar un único PDF con las páginas seleccionadas
+      // Si SÍ se unifican los rangos -> Devolver un solo PDF unificado
+      const allIndices = rangeGroups.flat();
       const outPdf = await PDFDocument.create();
-      const copiedPages = await outPdf.copyPages(srcPdf, pageIndices);
+      const copiedPages = await outPdf.copyPages(srcPdf, allIndices);
       copiedPages.forEach(p => outPdf.addPage(p));
       const pdfBytes = await outPdf.save();
 
@@ -160,7 +182,10 @@ app.post('/delete', upload.single('file'), async (req, res) => {
   try {
     if (!req.file) return res.status(400).send('No se ha subido ningún archivo.');
 
-    const pagesToDelete = (req.body.pages || '').split(',').map(n => parseInt(n.trim(), 10) - 1).filter(n => !isNaN(n));
+    const pagesToDeleteRaw = parsePageList(req.body.pages);
+    // Convertir de índice base 1 (frontend) a base 0
+    const pagesToDelete = pagesToDeleteRaw.map(n => n - 1);
+
     const cleanedBuffer = await cleanPdfBuffer(req.file.buffer);
     const srcPdf = await PDFDocument.load(cleanedBuffer, { ignoreEncryption: true });
     const totalPages = srcPdf.getPageCount();
@@ -185,6 +210,94 @@ app.post('/delete', upload.single('file'), async (req, res) => {
   } catch (err) {
     console.error('Error en /delete:', err);
     return res.status(500).send(`Error eliminando páginas: ${err.message}`);
+  }
+});
+
+// ------------------------------------------------------------
+// 4. ENDPOINT: EXTRAER PÁGINAS (/extract)
+// ------------------------------------------------------------
+app.post('/extract', upload.single('file'), async (req, res) => {
+  try {
+    if (!req.file) return res.status(400).send('No se ha subido ningún archivo.');
+
+    const pagesToExtractRaw = parsePageList(req.body.pages);
+    const pagesToExtract = pagesToExtractRaw.map(n => n - 1);
+
+    const cleanedBuffer = await cleanPdfBuffer(req.file.buffer);
+    const srcPdf = await PDFDocument.load(cleanedBuffer, { ignoreEncryption: true });
+    const totalPages = srcPdf.getPageCount();
+
+    const validIndices = pagesToExtract.filter(idx => idx >= 0 && idx < totalPages);
+    if (validIndices.length === 0) {
+      return res.status(400).send('No se seleccionaron páginas válidas para extraer.');
+    }
+
+    const outPdf = await PDFDocument.create();
+    const copiedPages = await outPdf.copyPages(srcPdf, validIndices);
+    copiedPages.forEach(p => outPdf.addPage(p));
+
+    const pdfBytes = await outPdf.save();
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', 'attachment; filename="paginas_extraidas.pdf"');
+    return res.send(Buffer.from(pdfBytes));
+  } catch (err) {
+    console.error('Error en /extract:', err);
+    return res.status(500).send(`Error extrayendo páginas: ${err.message}`);
+  }
+});
+
+// ------------------------------------------------------------
+// 5. ENDPOINT: ORDENAR PÁGINAS (/reorder)
+// ------------------------------------------------------------
+app.post('/reorder', upload.single('file'), async (req, res) => {
+  try {
+    if (!req.file) return res.status(400).send('No se ha subido ningún archivo.');
+
+    const orderRaw = parsePageList(req.body.order || req.body.pages);
+    const orderIndices = orderRaw.map(n => n - 1);
+
+    const cleanedBuffer = await cleanPdfBuffer(req.file.buffer);
+    const srcPdf = await PDFDocument.load(cleanedBuffer, { ignoreEncryption: true });
+    const totalPages = srcPdf.getPageCount();
+
+    const validIndices = orderIndices.filter(idx => idx >= 0 && idx < totalPages);
+    if (validIndices.length === 0) {
+      return res.status(400).send('El orden de páginas proporcionado no es válido.');
+    }
+
+    const outPdf = await PDFDocument.create();
+    const copiedPages = await outPdf.copyPages(srcPdf, validIndices);
+    copiedPages.forEach(p => outPdf.addPage(p));
+
+    const pdfBytes = await outPdf.save();
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', 'attachment; filename="documento_reordenado.pdf"');
+    return res.send(Buffer.from(pdfBytes));
+  } catch (err) {
+    console.error('Error en /reorder:', err);
+    return res.status(500).send(`Error reordenando páginas: ${err.message}`);
+  }
+});
+
+// ------------------------------------------------------------
+// 6. ENDPOINT: COMPRIMIR PDF (/compress)
+// ------------------------------------------------------------
+app.post('/compress', upload.single('file'), async (req, res) => {
+  try {
+    if (!req.file) return res.status(400).send('No se ha subido ningún archivo.');
+
+    const cleanedBuffer = await cleanPdfBuffer(req.file.buffer);
+    const srcPdf = await PDFDocument.load(cleanedBuffer, { ignoreEncryption: true });
+
+    // Guardado de pdf-lib optimizado sin objetos duplicados
+    const pdfBytes = await srcPdf.save({ useObjectStreams: true });
+
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', 'attachment; filename="documento_comprimido.pdf"');
+    return res.send(Buffer.from(pdfBytes));
+  } catch (err) {
+    console.error('Error en /compress:', err);
+    return res.status(500).send(`Error comprimiendo PDF: ${err.message}`);
   }
 });
 
