@@ -188,62 +188,49 @@ app.post('/split', upload.any(), async (req, res) => {
   }
 });
 
-// ============================================================
-// 3. ENDPOINT: ELIMINAR PÁGINAS (/delete)
-// ============================================================
+// ------------------------------------------------------------
+// 3. ELIMINAR PÁGINAS (/delete) - Corregido y blindado
+// ------------------------------------------------------------
 app.post('/delete', upload.any(), async (req, res) => {
-    try {
-        const file = req.files && req.files.length > 0 ? req.files[0] : req.file;
-        if (!file) {
-            return res.status(400).send('No se ha recibido ningún archivo PDF.');
-        }
-
-        const rawPages = req.body.pagesToDelete || req.body.pages || '';
-        const pagesToDelete = rawPages
-            .toString()
-            .split(',')
-            .map(n => parseInt(n.trim(), 10))
-            .filter(n => !isNaN(n) && n > 0);
-
-        if (pagesToDelete.length === 0) {
-            return res.status(400).send('No se han especificado páginas válidas para eliminar.');
-        }
-
-        const srcPdf = await PDFDocument.load(file.buffer, { ignoreEncryption: true });
-        const totalPages = srcPdf.getPageCount();
-
-        const keepIndices = [];
-        for (let i = 1; i <= totalPages; i++) {
-            if (!pagesToDelete.includes(i)) {
-                keepIndices.push(i - 1);
-            }
-        }
-
-        if (keepIndices.length === 0) {
-            return res.status(400).send('No puedes eliminar todas las páginas del documento.');
-        }
-
-        const newPdf = await PDFDocument.create();
-        const copiedPages = await newPdf.copyPages(srcPdf, keepIndices);
-        copiedPages.forEach(page => newPdf.addPage(page));
-
-        const pdfBytes = await newPdf.save();
-
-        res.setHeader('Content-Type', 'application/pdf');
-        res.setHeader('Content-Disposition', 'attachment; filename="pdf_modificado.pdf"');
-        return res.send(Buffer.from(pdfBytes));
-
-    } catch (error) {
-        console.error('Error en /delete:', error);
-        return res.status(500).send('Error interno al eliminar las páginas: ' + error.message);
+  try {
+    const file = req.file || (req.files && req.files[0]);
+    if (!file) {
+      return res.status(400).send('No se ha subido ningún archivo.');
     }
-});
 
-// Fallback final: si entra a una ruta no registrada, devuelve index.html de public
-app.use((req, res) => {
-    res.sendFile(path.join(__dirname, 'public', 'index.html'));
-});
+    // Recoger los datos de páginas a eliminar de cualquier posible propiedad que envíe el cliente
+    const rawInput = req.body.pages || req.body.remove || req.body.deletedPages || req.body.paginas;
+    const pagesToDeleteRaw = parsePageList(rawInput);
+    const pagesToDelete = pagesToDeleteRaw.map(n => n - 1);
 
+    const cleanedBuffer = await cleanPdfBuffer(file.buffer);
+    const srcPdf = await PDFDocument.load(cleanedBuffer, { ignoreEncryption: true });
+    const totalPages = srcPdf.getPageCount();
+
+    const pagesToKeep = [];
+    for (let i = 0; i < totalPages; i++) {
+      if (!pagesToDelete.includes(i)) {
+        pagesToKeep.push(i);
+      }
+    }
+
+    if (pagesToKeep.length === 0) {
+      return res.status(400).send('No puedes eliminar todas las páginas del documento.');
+    }
+
+    const outPdf = await PDFDocument.create();
+    const copiedPages = await outPdf.copyPages(srcPdf, pagesToKeep);
+    copiedPages.forEach(p => outPdf.addPage(p));
+
+    const pdfBytes = await outPdf.save();
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', 'attachment; filename="documento_modificado.pdf"');
+    return res.send(Buffer.from(pdfBytes));
+  } catch (err) {
+    console.error('Error en /delete:', err);
+    return res.status(500).send(`Error eliminando páginas: ${err.message}`);
+  }
+});
 // ------------------------------------------------------------
 // 4. EXTRAER PÁGINAS (/extract) - Funciona OK
 // ------------------------------------------------------------
