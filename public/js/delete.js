@@ -1,126 +1,92 @@
-pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+document.addEventListener('DOMContentLoaded', () => {
+    const fileInput = document.getElementById('fileInput');
+    const deleteBtn = document.getElementById('deleteBtn');
+    const pagesContainer = document.getElementById('pagesContainer');
+    
+    // Array para almacenar las páginas seleccionadas para ELIMINAR (base 1)
+    let selectedPagesToDelete = new Set();
+    let currentFile = null;
 
-let deleteFile = null;
-let pagesToDelete = []; // Guarda true/false si la página será eliminada
-const deleteBtn = document.getElementById('deleteBtn');
-const deletePreview = document.getElementById('deletePreview');
-const gridContainer = document.getElementById('deletePageGrid');
-
-setupDropZone('dropZoneDelete', 'fileInputDelete', files => {
-    if (files && files[0]) {
-        deleteFile = files[0];
-        document.querySelector('#dropZoneDelete p').textContent = `📄 ${deleteFile.name}`;
-        loadAndRenderPdf(deleteFile);
+    if (fileInput) {
+        fileInput.addEventListener('change', (e) => {
+            if (e.target.files.length > 0) {
+                currentFile = e.target.files[0];
+                selectedPagesToDelete.clear();
+                // Si tienes lógica de renderizado previo de miniaturas, se ejecuta aquí
+            }
+        });
     }
-});
 
-async function loadAndRenderPdf(file) {
-    gridContainer.innerHTML = '<p style="font-size:0.9rem; color:#6b7280;">Cargando miniaturas...</p>';
-    deletePreview.style.display = 'block';
+    if (deleteBtn) {
+        deleteBtn.addEventListener('click', async () => {
+            if (!currentFile) {
+                alert('Por favor, selecciona un archivo PDF primero.');
+                return;
+            }
 
-    try {
-        const arrayBuffer = await file.arrayBuffer();
-        const pdfDoc = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
-        const numPages = pdfDoc.numPages;
-
-        pagesToDelete = new Array(numPages).fill(false); // Por defecto ninguna está marcada para eliminar
-        gridContainer.innerHTML = '';
-
-        for (let i = 1; i <= numPages; i++) {
-            const page = await pdfDoc.getPage(i);
-            const viewport = page.getViewport({ scale: 0.25 });
-
-            const card = document.createElement('div');
-            card.className = 'page-card-delete';
-            card.dataset.pageIndex = i - 1;
-
-            const canvas = document.createElement('canvas');
-            const ctx = canvas.getContext('2d');
-            canvas.height = viewport.height;
-            canvas.width = viewport.width;
-
-            await page.render({ canvasContext: ctx, viewport: viewport }).promise;
-
-            const label = document.createElement('span');
-            label.textContent = `Pág. ${i}`;
-
-            card.appendChild(canvas);
-            card.appendChild(label);
-
-            card.addEventListener('click', () => {
-                const idx = parseInt(card.dataset.pageIndex);
-                pagesToDelete[idx] = !pagesToDelete[idx];
-                card.classList.toggle('to-delete', pagesToDelete[idx]);
+            // Recopilar páginas seleccionadas (puedes ajustar cómo obtienes los índices según tu UI)
+            // Ejemplo: si tienes checkboxes o elementos con clase .selected
+            const selectedElements = document.querySelectorAll('.page-thumb.selected, .page-checkbox:checked');
+            
+            selectedPagesToDelete.clear();
+            selectedElements.forEach(el => {
+                const pageNum = parseInt(el.dataset.page || el.value, 10);
+                if (!isNaN(pageNum)) {
+                    selectedPagesToDelete.add(pageNum);
+                }
             });
 
-            gridContainer.appendChild(card);
-        }
-    } catch (err) {
-        console.error('Error al generar miniaturas:', err);
-        gridContainer.innerHTML = '<p style="color:red;">Error al cargar las miniaturas del PDF.</p>';
-    }
-}
+            if (selectedPagesToDelete.size === 0) {
+                alert('Selecciona al menos una página para eliminar.');
+                return;
+            }
 
-document.getElementById('deleteSelectAll').addEventListener('click', () => {
-    pagesToDelete.fill(true);
-    document.querySelectorAll('.page-card-delete').forEach(card => card.classList.add('to-delete'));
-});
+            // Deshabilitar botón para evitar múltiples envíos
+            deleteBtn.disabled = true;
+            deleteBtn.textContent = 'Procesando...';
 
-document.getElementById('deleteDeselectAll').addEventListener('click', () => {
-    pagesToDelete.fill(false);
-    document.querySelectorAll('.page-card-delete').forEach(card => card.classList.remove('to-delete'));
-});
+            try {
+                const formData = new FormData();
+                formData.append('file', currentFile);
+                
+                // CRUCIAL: Convertir el conjunto de páginas a una cadena separada por comas (ej: "1,3,5")
+                const pagesArray = Array.from(selectedPagesToDelete).sort((a, b) => a - b);
+                formData.append('pages', pagesArray.join(','));
 
-deleteBtn.addEventListener('click', async () => {
-    if (!deleteFile) { alert('Primero selecciona un PDF'); return; }
+                const response = await fetch('/delete-pages', {
+                    method: 'POST',
+                    body: formData
+                });
 
-    const pagesToRemoveIndices = pagesToDelete
-        .map((toDelete, idx) => toDelete ? idx + 1 : null)
-        .filter(v => v !== null);
+                // Si la respuesta HTTP no es exitosa (400, 500), NO descargamos el blob
+                if (!response.ok) {
+                    const errorMsg = await response.text();
+                    alert('Error en el servidor: ' + errorMsg);
+                    return;
+                }
 
-    if (pagesToRemoveIndices.length === 0) {
-        alert('Selecciona al menos una página para eliminar.');
-        return;
-    }
+                // Descarga limpia del Blob PDF
+                const blob = await response.blob();
+                const downloadUrl = window.URL.createObjectURL(blob);
+                
+                const a = document.createElement('a');
+                a.style.display = 'none';
+                a.href = downloadUrl;
+                a.download = 'pdf_modificado.pdf';
+                document.body.appendChild(a);
+                a.click();
+                
+                // Limpiar referencia de memoria
+                window.URL.revokeObjectURL(downloadUrl);
+                a.remove();
 
-    if (pagesToRemoveIndices.length === pagesToDelete.length) {
-        alert('No puedes eliminar todas las páginas del documento.');
-        return;
-    }
-
-    deleteBtn.disabled = true;
-    if (typeof showLoading === 'function') showLoading(true);
-
-    try {
-        const formData = new FormData();
-        formData.append('file', deleteFile);
-        formData.append('pagesToDelete', pagesToRemoveIndices.join(','));
-
-        const resp = await fetch('/delete', { method: 'POST', body: formData });
-        if (!resp.ok) {
-            const errText = await resp.text();
-            throw new Error(errText);
-        }
-
-        const blob = await resp.blob();
-        const url = window.URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = 'pdf_modificado.pdf';
-        document.body.appendChild(a);
-        a.click();
-        a.remove();
-        window.URL.revokeObjectURL(url);
-
-        if (typeof showStatus === 'function') showStatus('deleteStatus', '✅ Páginas eliminadas con éxito');
-    } catch (err) {
-        if (typeof showStatus === 'function') {
-            showStatus('deleteStatus', '❌ ' + err.message, true);
-        } else {
-            alert('Error: ' + err.message);
-        }
-    } finally {
-        deleteBtn.disabled = false;
-        if (typeof showLoading === 'function') showLoading(false);
+            } catch (error) {
+                console.error('Error al procesar la eliminación:', error);
+                alert('Ocurrió un error de red o de comunicación con el servidor.');
+            } finally {
+                deleteBtn.disabled = false;
+                deleteBtn.textContent = 'Eliminar páginas seleccionadas';
+            }
+        });
     }
 });
