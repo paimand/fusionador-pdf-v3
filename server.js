@@ -1,285 +1,194 @@
 const express = require('express');
 const multer = require('multer');
-const path = require('path');
-const fs = require('fs');
 const { PDFDocument } = require('pdf-lib');
-const Archiver = require('archiver');
+const JSZip = require('jszip');
+const fs = require('fs');
+const path = require('path');
+const os = require('os');
+const { exec } = require('child_process');
 
 const app = express();
-const PORT = process.env.PORT || 3000;
-
-// Configuración de Multer en memoria
 const upload = multer({ storage: multer.memoryStorage() });
 
-// Garantizar la existencia de la carpeta temporal 'uploads'
-const uploadDir = path.join(__dirname, 'uploads');
-if (!fs.existsSync(uploadDir)) {
-    fs.mkdirSync(uploadDir, { recursive: true });
+app.use(express.static('public'));
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+
+// Helper para desencriptar y reparar PDFs bancarios con qpdf
+async function cleanPdfBuffer(inputBuffer) {
+  return new Promise((resolve) => {
+    const tempIn = path.join(os.tmpdir(), `in_${Date.now()}_${Math.random().toString(36).substring(2)}.pdf`);
+    const tempOut = path.join(os.tmpdir(), `out_${Date.now()}_${Math.random().toString(36).substring(2)}.pdf`);
+
+    fs.writeFileSync(tempIn, inputBuffer);
+
+    exec(`qpdf --decrypt "${tempIn}" "${tempOut}"`, (error) => {
+      if (!error && fs.existsSync(tempOut)) {
+        const cleanedBuffer = fs.readFileSync(tempOut);
+        try { fs.unlinkSync(tempIn); } catch (e) {}
+        try { fs.unlinkSync(tempOut); } catch (e) {}
+        resolve(cleanedBuffer);
+      } else {
+        try { fs.unlinkSync(tempIn); } catch (e) {}
+        try { if (fs.existsSync(tempOut)) fs.unlinkSync(tempOut); } catch (e) {}
+        resolve(inputBuffer);
+      }
+    });
+  });
 }
 
-// Middlewares para JSON y formularios
-app.use(express.json({ limit: '100mb' }));
-app.use(express.urlencoded({ extended: true, limit: '100mb' }));
-
-// Servir archivos estáticos desde la carpeta public (CSS, JS, etc.)
-app.use(express.static(path.join(__dirname, 'public')));
-
-// ============================================================
-// RUTAS PARA SERVIR VISTAS HTML (CARPETA PUBLIC)
-// ============================================================
-app.get('/', (req, res) => {
-    res.sendFile(path.join(__dirname, 'public', 'index.html'));
-});
-
-app.get('/merge.html', (req, res) => {
-    res.sendFile(path.join(__dirname, 'public', 'merge.html'));
-});
-
-app.get('/split.html', (req, res) => {
-    res.sendFile(path.join(__dirname, 'public', 'split.html'));
-});
-
-app.get('/compress.html', (req, res) => {
-    res.sendFile(path.join(__dirname, 'public', 'compress.html'));
-});
-
-app.get('/delete.html', (req, res) => {
-    res.sendFile(path.join(__dirname, 'public', 'delete.html'));
-});
-
-app.get('/reorder.html', (req, res) => {
-    res.sendFile(path.join(__dirname, 'public', 'reorder.html'));
-});
-
-// ============================================================
-// 1. ENDPOINT: UNIR PDFs (/merge)
-// ============================================================
-app.post('/merge', upload.any(), async (req, res) => {
-    try {
-        if (!req.files || req.files.length < 2) {
-            return res.status(400).send('Se requieren al menos dos archivos PDF para unir.');
-        }
-
-        const mergedPdf = await PDFDocument.create();
-
-        for (const file of req.files) {
-            const pdf = await PDFDocument.load(file.buffer);
-            const copiedPages = await mergedPdf.copyPages(pdf, pdf.getPageIndices());
-            copiedPages.forEach(page => mergedPdf.addPage(page));
-        }
-
-        const mergedPdfBytes = await mergedPdf.save();
-
-        res.setHeader('Content-Type', 'application/pdf');
-        res.setHeader('Content-Disposition', 'attachment; filename="documento_unido.pdf"');
-        return res.send(Buffer.from(mergedPdfBytes));
-    } catch (error) {
-        console.error('Error en /merge:', error);
-        return res.status(500).send('Error procesando la unión de PDFs: ' + error.message);
+// ------------------------------------------------------------
+// 1. ENDPOINT: UNIR PDF (/merge)
+// ------------------------------------------------------------
+app.post('/merge', upload.array('files'), async (req, res) => {
+  try {
+    if (!req.files || req.files.length === 0) {
+      return res.status(400).send('No se han subido archivos.');
     }
+
+    const mergedPdf = await PDFDocument.create();
+
+    for (const file of req.files) {
+      const cleanedBuffer = await cleanPdfBuffer(file.buffer);
+      const pdf = await PDFDocument.load(cleanedBuffer, { ignoreEncryption: true });
+      const copiedPages = await mergedPdf.copyPages(pdf, pdf.getPageIndices());
+      copiedPages.forEach((page) => mergedPdf.addPage(page));
+    }
+
+    const mergedPdfBytes = await mergedPdf.save();
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', 'attachment; filename="documento_unido.pdf"');
+    return res.send(Buffer.from(mergedPdfBytes));
+  } catch (err) {
+    console.error('Error en /merge:', err);
+    return res.status(500).send(`Error procesando la unión de PDFs: ${err.message}`);
+  }
 });
 
-// ============================================================
-// 2. ENDPOINT: DIVIDIR / EXTRAER PDF (/split)
-// ============================================================
+// ------------------------------------------------------------
+// 2. ENDPOINT: DIVIDIR PDF (/split)
+// ------------------------------------------------------------
 app.post('/split', upload.single('file'), async (req, res) => {
-    try {
-        const file = req.file || (req.files && req.files[0]);
-        if (!file) {
-            return res.status(400).send('No se ha recibido ningún archivo PDF.');
-        }
+  try {
+    if (!req.file) {
+      return res.status(400).send('No se ha subido ningún archivo.');
+    }
 
-        const mode = req.body.mode || 'individual';
-        const rangesStr = req.body.ranges || '';
-        const srcPdf = await PDFDocument.load(file.buffer, { ignoreEncryption: true });
-        const totalPages = srcPdf.getPageCount();
+    const mode = req.body.mode || 'individual';
+    const rangesStr = req.body.ranges || req.body.pages || '';
 
-        let pagesToExtract = [];
+    const cleanedBuffer = await cleanPdfBuffer(req.file.buffer);
+    const srcPdf = await PDFDocument.load(cleanedBuffer, { ignoreEncryption: true });
+    const totalPages = srcPdf.getPageCount();
 
-        if (mode === 'individual') {
-            pagesToExtract = rangesStr.split(',')
-                .map(n => parseInt(n.trim(), 10))
-                .filter(n => !isNaN(n) && n >= 1 && n <= totalPages);
+    let pageIndices = [];
+
+    if (rangesStr && rangesStr.trim() !== '') {
+      const parts = rangesStr.split(',');
+      for (const part of parts) {
+        if (part.includes('-')) {
+          const [start, end] = part.split('-').map(n => parseInt(n.trim(), 10));
+          if (!isNaN(start) && !isNaN(end)) {
+            for (let i = Math.min(start, end); i <= Math.max(start, end); i++) {
+              if (i >= 1 && i <= totalPages) pageIndices.push(i - 1);
+            }
+          }
         } else {
-            const groups = rangesStr.split(',').map(s => s.trim()).filter(Boolean);
-            for (const group of groups) {
-                if (group.includes('-')) {
-                    const [start, end] = group.split('-').map(n => parseInt(n.trim(), 10));
-                    const pStart = isNaN(start) ? 1 : Math.max(1, start);
-                    const pEnd = isNaN(end) ? totalPages : Math.min(totalPages, end);
-                    for (let p = pStart; p <= pEnd; p++) pagesToExtract.push(p);
-                } else {
-                    const p = parseInt(group, 10);
-                    if (!isNaN(p) && p >= 1 && p <= totalPages) pagesToExtract.push(p);
-                }
-            }
+          const pageNum = parseInt(part.trim(), 10);
+          if (!isNaN(pageNum) && pageNum >= 1 && pageNum <= totalPages) {
+            pageIndices.push(pageNum - 1);
+          }
         }
+      }
+    } else {
+      pageIndices = Array.from({ length: totalPages }, (_, i) => i);
+    }
 
-        pagesToExtract = [...new Set(pagesToExtract)].sort((a, b) => a - b);
+    if (pageIndices.length === 0) {
+      pageIndices = Array.from({ length: totalPages }, (_, i) => i);
+    }
 
-        if (pagesToExtract.length === 0) {
-            return res.status(400).send('No se han especificado páginas válidas.');
-        }
-
-        const newPdf = await PDFDocument.create();
-        const pageIndices = pagesToExtract.map(p => p - 1);
-        const copiedPages = await newPdf.copyPages(srcPdf, pageIndices);
-        copiedPages.forEach(p => newPdf.addPage(p));
-
-        const pdfBytes = await newPdf.save();
+    // Modo INDIVIDUAL o MÚLTIPLES PÁGINAS DIVIDIDAS -> Archivo ZIP
+    if (mode === 'individual' || (mode === 'all' && pageIndices.length > 1)) {
+      if (pageIndices.length === 1) {
+        const singlePdf = await PDFDocument.create();
+        const [copiedPage] = await singlePdf.copyPages(srcPdf, [pageIndices[0]]);
+        singlePdf.addPage(copiedPage);
+        const pdfBytes = await singlePdf.save();
 
         res.setHeader('Content-Type', 'application/pdf');
-        res.setHeader('Content-Disposition', 'attachment; filename="documento_extraido.pdf"');
+        res.setHeader('Content-Disposition', `attachment; filename="pagina_${pageIndices[0] + 1}.pdf"`);
         return res.send(Buffer.from(pdfBytes));
+      }
 
-    } catch (error) {
-        console.error('Error en /split:', error);
-        return res.status(500).send('Error extrayendo las páginas: ' + error.message);
+      const zip = new JSZip();
+      for (let i = 0; i < pageIndices.length; i++) {
+        const idx = pageIndices[i];
+        const singlePdf = await PDFDocument.create();
+        const [copiedPage] = await singlePdf.copyPages(srcPdf, [idx]);
+        singlePdf.addPage(copiedPage);
+        const pdfBytes = await singlePdf.save();
+        zip.file(`pagina_${idx + 1}.pdf`, pdfBytes);
+      }
+
+      const zipBuffer = await zip.generateAsync({ type: 'nodebuffer' });
+      res.setHeader('Content-Type', 'application/zip');
+      res.setHeader('Content-Disposition', 'attachment; filename="paginas_divididas.zip"');
+      return res.send(zipBuffer);
+
+    } else {
+      // Modo RANGO -> Generar un único PDF con las páginas seleccionadas
+      const outPdf = await PDFDocument.create();
+      const copiedPages = await outPdf.copyPages(srcPdf, pageIndices);
+      copiedPages.forEach(p => outPdf.addPage(p));
+      const pdfBytes = await outPdf.save();
+
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', 'attachment; filename="documento_dividido.pdf"');
+      return res.send(Buffer.from(pdfBytes));
     }
+  } catch (err) {
+    console.error('Error en /split:', err);
+    return res.status(500).send(`Error dividiendo PDF: ${err.message}`);
+  }
 });
 
-// ============================================================
-// 3. ENDPOINT: REORDENAR PÁGINAS PDF (/reorder)
-// ============================================================
-app.post('/reorder', upload.single('file'), async (req, res) => {
-    try {
-        const file = req.file || (req.files && req.files[0]);
-        if (!file) {
-            return res.status(400).send('No se ha recibido ningún archivo PDF.');
-        }
+// ------------------------------------------------------------
+// 3. ENDPOINT: ELIMINAR PÁGINAS (/delete)
+// ------------------------------------------------------------
+app.post('/delete', upload.single('file'), async (req, res) => {
+  try {
+    if (!req.file) return res.status(400).send('No se ha subido ningún archivo.');
 
-        const pageOrderStr = req.body.order || '';
-        const srcPdf = await PDFDocument.load(file.buffer, { ignoreEncryption: true });
-        const totalPages = srcPdf.getPageCount();
+    const pagesToDelete = (req.body.pages || '').split(',').map(n => parseInt(n.trim(), 10) - 1).filter(n => !isNaN(n));
+    const cleanedBuffer = await cleanPdfBuffer(req.file.buffer);
+    const srcPdf = await PDFDocument.load(cleanedBuffer, { ignoreEncryption: true });
+    const totalPages = srcPdf.getPageCount();
 
-        // Convertir la secuencia a índices base-0 respetando estrictamente el orden recibido
-        const pageIndices = pageOrderStr
-            .split(',')
-            .map(n => parseInt(n.trim(), 10) - 1)
-            .filter(idx => !isNaN(idx) && idx >= 0 && idx < totalPages);
-
-        if (pageIndices.length === 0) {
-            return res.status(400).send('No se ha recibido una secuencia de orden válida.');
-        }
-
-        const newPdf = await PDFDocument.create();
-
-        // Copiar página por página en la secuencia exacta elegida
-        for (const idx of pageIndices) {
-            const [copiedPage] = await newPdf.copyPages(srcPdf, [idx]);
-            newPdf.addPage(copiedPage);
-        }
-
-        const pdfBytes = await newPdf.save();
-
-        res.setHeader('Content-Type', 'application/pdf');
-        res.setHeader('Content-Disposition', 'attachment; filename="pdf_reordenado.pdf"');
-        return res.send(Buffer.from(pdfBytes));
-
-    } catch (error) {
-        console.error('Error en /reorder:', error);
-        return res.status(500).send('Error al reordenar las páginas: ' + error.message);
+    const pagesToKeep = [];
+    for (let i = 0; i < totalPages; i++) {
+      if (!pagesToDelete.includes(i)) pagesToKeep.push(i);
     }
-});
 
-// ============================================================
-// 4. ENDPOINT: COMPRESIÓN ULTRARRÁPIDA (/compress)
-// ============================================================
-app.post('/compress', async (req, res) => {
-    try {
-        const { images, level } = req.body;
-
-        if (!images || !Array.isArray(images) || images.length === 0) {
-            return res.status(400).send('No se han recibido páginas para procesar.');
-        }
-
-        const pdfDoc = await PDFDocument.create();
-
-        for (const dataUrl of images) {
-            const base64Data = dataUrl.replace(/^data:image\/jpeg;base64,/, '');
-            const imageBuffer = Buffer.from(base64Data, 'base64');
-
-            const embeddedImage = await pdfDoc.embedJpg(imageBuffer);
-            const { width, height } = embeddedImage;
-
-            const page = pdfDoc.addPage([width, height]);
-            page.drawImage(embeddedImage, {
-                x: 0,
-                y: 0,
-                width: width,
-                height: height,
-            });
-        }
-
-        const pdfBytes = await pdfDoc.save();
-
-        res.setHeader('Content-Type', 'application/pdf');
-        res.setHeader('Content-Disposition', `attachment; filename="compressed_${level || 'result'}.pdf"`);
-        return res.send(Buffer.from(pdfBytes));
-
-    } catch (error) {
-        console.error('Error procesando compresión rápida:', error);
-        return res.status(500).send('Error interno reconstruyendo el PDF comprimido.');
+    if (pagesToKeep.length === 0) {
+      return res.status(400).send('No puedes eliminar todas las páginas del documento.');
     }
+
+    const outPdf = await PDFDocument.create();
+    const copiedPages = await outPdf.copyPages(srcPdf, pagesToKeep);
+    copiedPages.forEach(p => outPdf.addPage(p));
+
+    const pdfBytes = await outPdf.save();
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', 'attachment; filename="documento_modificado.pdf"');
+    return res.send(Buffer.from(pdfBytes));
+  } catch (err) {
+    console.error('Error en /delete:', err);
+    return res.status(500).send(`Error eliminando páginas: ${err.message}`);
+  }
 });
 
-// ============================================================
-// 5. ENDPOINT: ELIMINAR PÁGINAS (/delete)
-// ============================================================
-app.post('/delete', upload.any(), async (req, res) => {
-    try {
-        const file = req.files && req.files.length > 0 ? req.files[0] : req.file;
-        if (!file) {
-            return res.status(400).send('No se ha recibido ningún archivo PDF.');
-        }
-
-        const rawPages = req.body.pagesToDelete || req.body.pages || '';
-        const pagesToDelete = rawPages
-            .toString()
-            .split(',')
-            .map(n => parseInt(n.trim(), 10))
-            .filter(n => !isNaN(n) && n > 0);
-
-        if (pagesToDelete.length === 0) {
-            return res.status(400).send('No se han especificado páginas válidas para eliminar.');
-        }
-
-        const srcPdf = await PDFDocument.load(file.buffer, { ignoreEncryption: true });
-        const totalPages = srcPdf.getPageCount();
-
-        const keepIndices = [];
-        for (let i = 1; i <= totalPages; i++) {
-            if (!pagesToDelete.includes(i)) {
-                keepIndices.push(i - 1);
-            }
-        }
-
-        if (keepIndices.length === 0) {
-            return res.status(400).send('No puedes eliminar todas las páginas del documento.');
-        }
-
-        const newPdf = await PDFDocument.create();
-        const copiedPages = await newPdf.copyPages(srcPdf, keepIndices);
-        copiedPages.forEach(page => newPdf.addPage(page));
-
-        const pdfBytes = await newPdf.save();
-
-        res.setHeader('Content-Type', 'application/pdf');
-        res.setHeader('Content-Disposition', 'attachment; filename="pdf_modificado.pdf"');
-        return res.send(Buffer.from(pdfBytes));
-
-    } catch (error) {
-        console.error('Error en /delete:', error);
-        return res.status(500).send('Error interno al eliminar las páginas: ' + error.message);
-    }
-});
-
-// Fallback final: si entra a una ruta no registrada, devuelve index.html de public
-app.use((req, res) => {
-    res.sendFile(path.join(__dirname, 'public', 'index.html'));
-});
-
-// Inicializar el servidor
+const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
-    console.log(`Servidor iniciado correctamente en el puerto ${PORT}`);
+  console.log(`Servidor iniciado en el puerto ${PORT}`);
 });
