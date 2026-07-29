@@ -49,7 +49,7 @@ function injectHeader() {
                                     <small>Quita las páginas innecesarias del PDF</small>
                                 </div>
                             </a>
-                            <a href="/split.html?mode=extract" class="dropdown-item ${currentSearch.includes('mode=extract') ? 'active' : ''}">
+                            <a href="/split.html?mode=extract" class="dropdown-item ${currentSearch.includes('extract') ? 'active' : ''}">
                                 <span class="icon">✂️</span>
                                 <div class="item-text">
                                     <strong>Extraer páginas</strong>
