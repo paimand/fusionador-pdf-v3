@@ -10,12 +10,11 @@ const { exec } = require('child_process');
 const app = express();
 const upload = multer({ storage: multer.memoryStorage() });
 
-// Incrementar el límite de payload para evitar PayloadTooLargeError (Problema 5)
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
 app.use(express.static('public'));
 
-// Helper para desproteger / limpiar PDFs bancarios con qpdf
+// Helper para limpiar/desencriptar PDFs bancarios con qpdf
 async function cleanPdfBuffer(inputBuffer) {
   return new Promise((resolve) => {
     const tempIn = path.join(os.tmpdir(), `in_${Date.now()}_${Math.random().toString(36).substring(2)}.pdf`);
@@ -38,7 +37,7 @@ async function cleanPdfBuffer(inputBuffer) {
   });
 }
 
-// Helper para parsear números/listas de páginas sin importar el formato enviado
+// Helper universal para parsear listas de páginas (acepta string, array, JSON)
 function parsePageList(input) {
   if (!input) return [];
   if (Array.isArray(input)) return input.map(n => parseInt(n, 10)).filter(n => !isNaN(n));
@@ -53,7 +52,7 @@ function parsePageList(input) {
 }
 
 // ------------------------------------------------------------
-// 1. ENDPOINT: UNIR PDF (/merge)
+// 1. UNIR PDF (/merge) - Ya funciona OK
 // ------------------------------------------------------------
 app.post('/merge', upload.any(), async (req, res) => {
   try {
@@ -81,7 +80,7 @@ app.post('/merge', upload.any(), async (req, res) => {
 });
 
 // ------------------------------------------------------------
-// 2. ENDPOINT: DIVIDIR PDF (/split)
+// 2. DIVIDIR PDF (/split) - Corregido para páginas individuales seleccionadas
 // ------------------------------------------------------------
 app.post('/split', upload.single('file'), async (req, res) => {
   try {
@@ -97,24 +96,33 @@ app.post('/split', upload.single('file'), async (req, res) => {
     const srcPdf = await PDFDocument.load(cleanedBuffer, { ignoreEncryption: true });
     const totalPages = srcPdf.getPageCount();
 
-    // MODO INDIVIDUAL (Sin cambios)
+    // MODO INDIVIDUAL: Respetar estrictamente las páginas seleccionadas si se especifican
     if (mode === 'individual') {
+      let selectedPages = parsePageList(rangesStr);
+      // Si el usuario no marcó ninguna explícitamente, por defecto usa todas
+      if (selectedPages.length === 0) {
+        selectedPages = Array.from({ length: totalPages }, (_, i) => i + 1);
+      }
+
       const zip = new JSZip();
-      for (let idx = 0; idx < totalPages; idx++) {
-        const singlePdf = await PDFDocument.create();
-        const [copiedPage] = await singlePdf.copyPages(srcPdf, [idx]);
-        singlePdf.addPage(copiedPage);
-        const pdfBytes = await singlePdf.save();
-        zip.file(`pagina_${idx + 1}.pdf`, pdfBytes);
+      for (const pageNum of selectedPages) {
+        const idx = pageNum - 1;
+        if (idx >= 0 && idx < totalPages) {
+          const singlePdf = await PDFDocument.create();
+          const [copiedPage] = await singlePdf.copyPages(srcPdf, [idx]);
+          singlePdf.addPage(copiedPage);
+          const pdfBytes = await singlePdf.save();
+          zip.file(`pagina_${pageNum}.pdf`, pdfBytes);
+        }
       }
 
       const zipBuffer = await zip.generateAsync({ type: 'nodebuffer' });
       res.setHeader('Content-Type', 'application/zip');
-      res.setHeader('Content-Disposition', 'attachment; filename="paginas_individuaes.zip"');
+      res.setHeader('Content-Disposition', 'attachment; filename="paginas_individuales.zip"');
       return res.send(zipBuffer);
     }
 
-    // MODO RANGOS
+    // MODO RANGOS (Funciona OK)
     const rangeGroups = [];
     if (rangesStr && rangesStr.trim() !== '') {
       const parts = rangesStr.split(',');
@@ -141,7 +149,6 @@ app.post('/split', upload.single('file'), async (req, res) => {
       return res.status(400).send('No se han especificado rangos válidos.');
     }
 
-    // Si NO se unifican los rangos -> Devolver archivo ZIP con cada rango
     if (!mergeRanges) {
       const zip = new JSZip();
       for (let i = 0; i < rangeGroups.length; i++) {
@@ -158,7 +165,6 @@ app.post('/split', upload.single('file'), async (req, res) => {
       res.setHeader('Content-Disposition', 'attachment; filename="rangos_divididos.zip"');
       return res.send(zipBuffer);
     } else {
-      // Si SÍ se unifican los rangos -> Devolver un solo PDF unificado
       const allIndices = rangeGroups.flat();
       const outPdf = await PDFDocument.create();
       const copiedPages = await outPdf.copyPages(srcPdf, allIndices);
@@ -176,14 +182,13 @@ app.post('/split', upload.single('file'), async (req, res) => {
 });
 
 // ------------------------------------------------------------
-// 3. ENDPOINT: ELIMINAR PÁGINAS (/delete)
+// 3. ELIMINAR PÁGINAS (/delete) - Ya funciona OK
 // ------------------------------------------------------------
 app.post('/delete', upload.single('file'), async (req, res) => {
   try {
     if (!req.file) return res.status(400).send('No se ha subido ningún archivo.');
 
     const pagesToDeleteRaw = parsePageList(req.body.pages);
-    // Convertir de índice base 1 (frontend) a base 0
     const pagesToDelete = pagesToDeleteRaw.map(n => n - 1);
 
     const cleanedBuffer = await cleanPdfBuffer(req.file.buffer);
@@ -214,7 +219,7 @@ app.post('/delete', upload.single('file'), async (req, res) => {
 });
 
 // ------------------------------------------------------------
-// 4. ENDPOINT: EXTRAER PÁGINAS (/extract)
+// 4. EXTRAER PÁGINAS (/extract) - Ya funciona OK
 // ------------------------------------------------------------
 app.post('/extract', upload.single('file'), async (req, res) => {
   try {
@@ -247,7 +252,7 @@ app.post('/extract', upload.single('file'), async (req, res) => {
 });
 
 // ------------------------------------------------------------
-// 5. ENDPOINT: ORDENAR PÁGINAS (/reorder)
+// 5. ORDENAR PÁGINAS (/reorder) - Ya funciona OK
 // ------------------------------------------------------------
 app.post('/reorder', upload.single('file'), async (req, res) => {
   try {
@@ -280,16 +285,16 @@ app.post('/reorder', upload.single('file'), async (req, res) => {
 });
 
 // ------------------------------------------------------------
-// 6. ENDPOINT: COMPRIMIR PDF (/compress)
+// 6. COMPRIMIR PDF (/compress) - Corregido con upload.any()
 // ------------------------------------------------------------
-app.post('/compress', upload.single('file'), async (req, res) => {
+app.post('/compress', upload.any(), async (req, res) => {
   try {
-    if (!req.file) return res.status(400).send('No se ha subido ningún archivo.');
+    const file = req.file || (req.files && req.files[0]);
+    if (!file) return res.status(400).send('No se ha subido ningún archivo.');
 
-    const cleanedBuffer = await cleanPdfBuffer(req.file.buffer);
+    const cleanedBuffer = await cleanPdfBuffer(file.buffer);
     const srcPdf = await PDFDocument.load(cleanedBuffer, { ignoreEncryption: true });
 
-    // Guardado de pdf-lib optimizado sin objetos duplicados
     const pdfBytes = await srcPdf.save({ useObjectStreams: true });
 
     res.setHeader('Content-Type', 'application/pdf');
