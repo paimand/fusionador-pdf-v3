@@ -38,26 +38,6 @@
             color: #64748b;
         }
 
-        .selection-toolbar {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 12px;
-        }
-        .btn-link-action {
-            background: none;
-            border: none;
-            color: #2563eb;
-            font-size: 0.85rem;
-            font-weight: 600;
-            cursor: pointer;
-            padding: 4px 8px;
-            border-radius: 4px;
-        }
-        .btn-link-action:hover {
-            background: #eff6ff;
-        }
-
         /* VISTA DE MINIATURAS (INDIVIDUAL) */
         .page-grid {
             display: grid;
@@ -80,13 +60,11 @@
             text-align: center;
             transition: all 0.2s ease;
             position: relative;
-            opacity: 0.6;
         }
         .page-card.selected {
             border-color: #2563eb;
             background-color: #eff6ff;
             box-shadow: 0 4px 12px rgba(37, 99, 235, 0.15);
-            opacity: 1;
         }
         .page-card canvas {
             max-width: 100%;
@@ -241,13 +219,7 @@
             </div>
 
             <div id="individualSection">
-                <div class="selection-toolbar">
-                    <p style="font-size:0.85rem; color:#64748b; margin:0;">Haz clic en las páginas para marcarlas/desmarcarlas:</p>
-                    <div>
-                        <button type="button" class="btn-link-action" onclick="selectAllIndividualPages(true)">Seleccionar todas</button>
-                        <button type="button" class="btn-link-action" onclick="selectAllIndividualPages(false)">Desmarcar todas</button>
-                    </div>
-                </div>
+                <p style="font-size:0.85rem; color:#64748b; margin-bottom:8px;">Haz clic en las páginas para activarlas o desactivarlas:</p>
                 <div id="individualGrid" class="page-grid"></div>
             </div>
 
@@ -300,7 +272,6 @@
                 pdfDocInstance = await pdfjsLib.getDocument({ data: typedarray }).promise;
                 pdfTotalPages = pdfDocInstance.numPages;
 
-                // Al cargar por defecto, seleccionamos todas las páginas
                 selectedPagesSet.clear();
                 for (let i = 1; i <= pdfTotalPages; i++) selectedPagesSet.add(i);
 
@@ -340,9 +311,8 @@
             grid.innerHTML = '';
 
             for (let i = 1; i <= pdfTotalPages; i++) {
-                const isSelected = selectedPagesSet.has(i);
                 const card = document.createElement('div');
-                card.className = `page-card ${isSelected ? 'selected' : ''}`;
+                card.className = 'page-card selected';
                 card.id = `ind_card_${i}`;
                 
                 const canvas = document.createElement('canvas');
@@ -364,19 +334,6 @@
 
                 grid.appendChild(card);
                 renderPageMiniature(i, canvas, 0.2);
-            }
-        }
-
-        function selectAllIndividualPages(select) {
-            selectedPagesSet.clear();
-            for (let i = 1; i <= pdfTotalPages; i++) {
-                const card = document.getElementById(`ind_card_${i}`);
-                if (select) {
-                    selectedPagesSet.add(i);
-                    if (card) card.classList.add('selected');
-                } else {
-                    if (card) card.classList.remove('selected');
-                }
             }
         }
 
