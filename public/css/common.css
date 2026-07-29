@@ -32,7 +32,7 @@ body {
 }
 
 /* ============================================================
-   NUEVA BARRA DE NAVEGACIÓN SUPERIOR (Estilo iLovePDF)
+   BARRA DE NAVEGACIÓN SUPERIOR
    ============================================================ */
 #app-header {
     width: 100%;
@@ -135,7 +135,7 @@ body {
     display: none;
     position: absolute;
     right: 0;
-    top: calc(100% + 8px);
+    top: calc(100% + 4px);
     background-color: #ffffff;
     min-width: 280px;
     box-shadow: 0 10px 30px rgba(0, 0, 0, 0.12);
@@ -143,6 +143,13 @@ body {
     border: 1px solid #e5e5ea;
     padding: 8px;
     z-index: 1010;
+}
+
+/* Apertura por hover en escritorios y por clase 'show' en táctil */
+@media (hover: hover) {
+    .dropdown:hover .dropdown-menu {
+        display: block;
+    }
 }
 
 .dropdown-menu.show {
@@ -161,7 +168,11 @@ body {
 }
 
 .dropdown-item:hover {
-    background: #f8f8fc;
+    background: #fff7ed;
+}
+
+.dropdown-item.active {
+    background: #fff7ed;
 }
 
 .dropdown-item .icon {
@@ -512,10 +523,6 @@ body {
 @media (max-width: 768px) {
     .navbar-ilove {
         padding: 0 16px;
-    }
-
-    .navbar-nav .nav-link {
-        display: none; /* Oculta enlaces directos en pantallas muy pequeñas */
     }
 
     .dropdown-menu {
