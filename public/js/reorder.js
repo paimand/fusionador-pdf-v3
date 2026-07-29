@@ -6,17 +6,21 @@ const reorderPreview = document.getElementById('reorderPreview');
 const gridContainer = document.getElementById('reorderPageGrid');
 let sortableInstance = null;
 
-setupDropZone('dropZoneReorder', 'fileInputReorder', files => {
-    if (files && files[0]) {
-        reorderFile = files[0];
-        document.querySelector('#dropZoneReorder p').textContent = `📄 ${reorderFile.name}`;
-        loadAndRenderPdf(reorderFile);
-    }
-});
+if (typeof setupDropZone === 'function') {
+    setupDropZone('dropZoneReorder', 'fileInputReorder', files => {
+        if (files && files[0]) {
+            reorderFile = files[0];
+            const dropText = document.querySelector('#dropZoneReorder p');
+            if (dropText) dropText.textContent = `📄 ${reorderFile.name}`;
+            loadAndRenderPdf(reorderFile);
+        }
+    });
+}
 
 async function loadAndRenderPdf(file) {
+    if (!gridContainer) return;
     gridContainer.innerHTML = '<p style="font-size:0.9rem; color:#6b7280;">Cargando miniaturas...</p>';
-    reorderPreview.style.display = 'block';
+    if (reorderPreview) reorderPreview.style.display = 'block';
 
     try {
         const arrayBuffer = await file.arrayBuffer();
@@ -31,7 +35,7 @@ async function loadAndRenderPdf(file) {
 
             const card = document.createElement('div');
             card.className = 'page-card-reorder';
-            card.setAttribute('data-page-index', i); // Asigna explícitamente el número de página original (1, 2, 3...)
+            card.setAttribute('data-page-index', i);
 
             const canvas = document.createElement('canvas');
             const ctx = canvas.getContext('2d');
@@ -60,52 +64,53 @@ async function loadAndRenderPdf(file) {
     }
 }
 
-reorderBtn.addEventListener('click', async () => {
-    if (!reorderFile) { alert('Primero selecciona un PDF'); return; }
+if (reorderBtn) {
+    reorderBtn.addEventListener('click', async () => {
+        if (!reorderFile) { alert('Primero selecciona un PDF'); return; }
 
-    // Recoge la secuencia real leyendo los elementos del DOM ordenados tras el drag-and-drop
-    const cards = gridContainer.querySelectorAll('.page-card-reorder');
-    const newOrderIndices = Array.from(cards).map(card => card.getAttribute('data-page-index'));
+        const cards = gridContainer.querySelectorAll('.page-card-reorder');
+        const newOrderIndices = Array.from(cards).map(card => card.getAttribute('data-page-index'));
 
-    if (newOrderIndices.length === 0) {
-        alert('No hay páginas para reordenar.');
-        return;
-    }
-
-    reorderBtn.disabled = true;
-    if (typeof showLoading === 'function') showLoading(true);
-
-    try {
-        const formData = new FormData();
-        formData.append('file', reorderFile);
-        formData.append('mode', 'ranges');
-        formData.append('ranges', newOrderIndices.join(','));
-
-        const resp = await fetch('/split', { method: 'POST', body: formData });
-        if (!resp.ok) {
-            const errText = await resp.text();
-            throw new Error(errText);
+        if (newOrderIndices.length === 0) {
+            alert('No hay páginas para reordenar.');
+            return;
         }
 
-        const blob = await resp.blob();
-        const url = window.URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = 'pdf_reordenado.pdf';
-        document.body.appendChild(a);
-        a.click();
-        a.remove();
-        window.URL.revokeObjectURL(url);
+        reorderBtn.disabled = true;
+        if (typeof showLoading === 'function') showLoading(true);
 
-        if (typeof showStatus === 'function') showStatus('reorderStatus', '✅ Documento reordenado con éxito');
-    } catch (err) {
-        if (typeof showStatus === 'function') {
-            showStatus('reorderStatus', '❌ ' + err.message, true);
-        } else {
-            alert('Error: ' + err.message);
+        try {
+            const formData = new FormData();
+            formData.append('file', reorderFile);
+            formData.append('order', newOrderIndices.join(','));
+
+            const resp = await fetch('/reorder', { method: 'POST', body: formData });
+            if (!resp.ok) {
+                const errText = await resp.text();
+                throw new Error(errText);
+            }
+
+            const blob = await resp.blob();
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.style.display = 'none';
+            a.href = url;
+            a.download = 'pdf_reordenado.pdf';
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+            window.URL.revokeObjectURL(url);
+
+            if (typeof showStatus === 'function') showStatus('reorderStatus', '✅ Documento reordenado con éxito');
+        } catch (err) {
+            if (typeof showStatus === 'function') {
+                showStatus('reorderStatus', '❌ ' + err.message, true);
+            } else {
+                alert('Error: ' + err.message);
+            }
+        } finally {
+            reorderBtn.disabled = false;
+            if (typeof showLoading === 'function') showLoading(false);
         }
-    } finally {
-        reorderBtn.disabled = false;
-        if (typeof showLoading === 'function') showLoading(false);
-    }
-});
+    });
+}
