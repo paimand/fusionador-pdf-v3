@@ -40,7 +40,7 @@ async function cleanPdfBuffer(inputBuffer) {
 // ------------------------------------------------------------
 // 1. ENDPOINT: UNIR PDF (/merge)
 // ------------------------------------------------------------
-app.post('/merge', upload.array('files'), async (req, res) => {
+app.post('/merge', upload.any(), async (req, res) => {
   try {
     if (!req.files || req.files.length === 0) {
       return res.status(400).send('No se han subido archivos.');
