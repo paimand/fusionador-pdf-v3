@@ -37,16 +37,25 @@ async function cleanPdfBuffer(inputBuffer) {
   });
 }
 
-// Helper universal robusto para parsear listas de páginas
+// Helper universal y robusto para parsear listas de páginas desde cualquier formato
 function parsePageList(input) {
   if (!input) return [];
-  if (Array.isArray(input)) return input.map(n => parseInt(n, 10)).filter(n => !isNaN(n));
+  if (Array.isArray(input)) {
+    return input.map(n => parseInt(n, 10)).filter(n => !isNaN(n));
+  }
   if (typeof input === 'string') {
-    try {
-      const parsed = JSON.parse(input);
-      if (Array.isArray(parsed)) return parsed.map(n => parseInt(n, 10)).filter(n => !isNaN(n));
-    } catch (e) {}
-    return input.split(',').map(n => parseInt(n.trim(), 10)).filter(n => !isNaN(n));
+    let trimmed = input.trim();
+    // Intentar parsear si viene como JSON stringify (ej: "[1,2,3]")
+    if (trimmed.startsWith('[') && trimmed.endsWith(']')) {
+      try {
+        const parsed = JSON.parse(trimmed);
+        if (Array.isArray(parsed)) {
+          return parsed.map(n => parseInt(n, 10)).filter(n => !isNaN(n));
+        }
+      } catch (e) {}
+    }
+    // Si viene separado por comas (ej: "1,2,3")
+    return trimmed.split(',').map(n => parseInt(n.trim(), 10)).filter(n => !isNaN(n));
   }
   return [];
 }
@@ -82,9 +91,10 @@ app.post('/merge', upload.any(), async (req, res) => {
 // ------------------------------------------------------------
 // 2. DIVIDIR PDF (/split) - Funciona OK
 // ------------------------------------------------------------
-app.post('/split', upload.single('file'), async (req, res) => {
+app.post('/split', upload.any(), async (req, res) => {
   try {
-    if (!req.file) {
+    const file = req.file || (req.files && req.files[0]);
+    if (!file) {
       return res.status(400).send('No se ha subido ningún archivo.');
     }
 
@@ -92,7 +102,7 @@ app.post('/split', upload.single('file'), async (req, res) => {
     const rangesStr = req.body.ranges || req.body.pages || '';
     const mergeRanges = req.body.mergeRanges === 'true' || req.body.mergeRanges === true;
 
-    const cleanedBuffer = await cleanPdfBuffer(req.file.buffer);
+    const cleanedBuffer = await cleanPdfBuffer(file.buffer);
     const srcPdf = await PDFDocument.load(cleanedBuffer, { ignoreEncryption: true });
     const totalPages = srcPdf.getPageCount();
 
@@ -121,7 +131,7 @@ app.post('/split', upload.single('file'), async (req, res) => {
     }
 
     const rangeGroups = [];
-    if (rangesStr && rangesStr.trim() !== '') {
+    if (rangesStr && typeof rangesStr === 'string' && rangesStr.trim() !== '') {
       const parts = rangesStr.split(',');
       for (const part of parts) {
         const groupIndices = [];
@@ -179,15 +189,17 @@ app.post('/split', upload.single('file'), async (req, res) => {
 });
 
 // ------------------------------------------------------------
-// 3. ELIMINAR PÁGINAS (/delete) - Corregido para leer req.body.pages / req.body.remove
+// 3. ELIMINAR PÁGINAS (/delete) - Corregido y blindado
 // ------------------------------------------------------------
 app.post('/delete', upload.any(), async (req, res) => {
   try {
     const file = req.file || (req.files && req.files[0]);
-    if (!file) return res.status(400).send('No se ha subido ningún archivo.');
+    if (!file) {
+      return res.status(400).send('No se ha subido ningún archivo.');
+    }
 
-    // Capturar cualquier variante posible de nombre de campo enviada por el front (pages, remove, deleted)
-    const rawInput = req.body.pages || req.body.remove || req.body.deletedPages;
+    // Recoger los datos de páginas a eliminar de cualquier posible propiedad que envíe el cliente
+    const rawInput = req.body.pages || req.body.remove || req.body.deletedPages || req.body.paginas;
     const pagesToDeleteRaw = parsePageList(rawInput);
     const pagesToDelete = pagesToDeleteRaw.map(n => n - 1);
 
@@ -197,7 +209,9 @@ app.post('/delete', upload.any(), async (req, res) => {
 
     const pagesToKeep = [];
     for (let i = 0; i < totalPages; i++) {
-      if (!pagesToDelete.includes(i)) pagesToKeep.push(i);
+      if (!pagesToDelete.includes(i)) {
+        pagesToKeep.push(i);
+      }
     }
 
     if (pagesToKeep.length === 0) {
@@ -224,7 +238,9 @@ app.post('/delete', upload.any(), async (req, res) => {
 app.post('/extract', upload.any(), async (req, res) => {
   try {
     const file = req.file || (req.files && req.files[0]);
-    if (!file) return res.status(400).send('No se ha subido ningún archivo.');
+    if (!file) {
+      return res.status(400).send('No se ha subido ningún archivo.');
+    }
 
     const pagesToExtractRaw = parsePageList(req.body.pages || req.body.extract);
     const pagesToExtract = pagesToExtractRaw.map(n => n - 1);
@@ -258,7 +274,9 @@ app.post('/extract', upload.any(), async (req, res) => {
 app.post('/reorder', upload.any(), async (req, res) => {
   try {
     const file = req.file || (req.files && req.files[0]);
-    if (!file) return res.status(400).send('No se ha subido ningún archivo.');
+    if (!file) {
+      return res.status(400).send('No se ha subido ningún archivo.');
+    }
 
     const orderRaw = parsePageList(req.body.order || req.body.pages);
     const orderIndices = orderRaw.map(n => n - 1);
@@ -287,7 +305,7 @@ app.post('/reorder', upload.any(), async (req, res) => {
 });
 
 // ------------------------------------------------------------
-// 6. COMPRIMIR PDF (/compress) - Corregido con upload.any() para capturar cualquier campo de archivo
+// 6. COMPRIMIR PDF (/compress) - Corregido y blindado con upload.any()
 // ------------------------------------------------------------
 app.post('/compress', upload.any(), async (req, res) => {
   try {
