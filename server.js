@@ -4,6 +4,9 @@ const path = require('path');
 const fs = require('fs');
 const { PDFDocument } = require('pdf-lib');
 const Archiver = require('archiver');
+const { exec } = require('child_process');
+const util = require('util');
+const execPromise = util.promisify(exec);
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -15,6 +18,26 @@ const upload = multer({ storage: multer.memoryStorage() });
 const uploadDir = path.join(__dirname, 'uploads');
 if (!fs.existsSync(uploadDir)) {
     fs.mkdirSync(uploadDir, { recursive: true });
+}
+
+// Helper para desproteger y aplanar PDFs mediante qpdf
+async function cleanPdfBuffer(inputBuffer) {
+    const tempInput = path.join(uploadDir, `temp_in_${Date.now()}_${Math.random().toString(36).substring(7)}.pdf`);
+    const tempOutput = path.join(uploadDir, `temp_out_${Date.now()}_${Math.random().toString(36).substring(7)}.pdf`);
+
+    try {
+        await fs.promises.writeFile(tempInput, inputBuffer);
+        // qpdf elimina firmas restrictivas y reconstruye el árbol de páginas
+        await execPromise(`qpdf --decrypt "${tempInput}" "${tempOutput}"`);
+        const cleanedBuffer = await fs.promises.readFile(tempOutput);
+        return cleanedBuffer;
+    } catch (err) {
+        console.warn('Aviso: qpdf no pudo procesar el archivo, usando el buffer original:', err.message);
+        return inputBuffer;
+    } finally {
+        if (fs.existsSync(tempInput)) fs.unlinkSync(tempInput);
+        if (fs.existsSync(tempOutput)) fs.unlinkSync(tempOutput);
+    }
 }
 
 // Middlewares para JSON y formularios
@@ -67,8 +90,11 @@ app.post('/merge', upload.any(), async (req, res) => {
         const mergedPdf = await PDFDocument.create();
 
         for (const file of req.files) {
-            // Se añade { ignoreEncryption: true } para omitir cifrados/firmas de recibos bancarios
-            const pdf = await PDFDocument.load(file.buffer, { ignoreEncryption: true });
+            // 1. Limpieza con qpdf para prevenir páginas en blanco
+            const cleanedBuffer = await cleanPdfBuffer(file.buffer);
+
+            // 2. Carga en pdf-lib
+            const pdf = await PDFDocument.load(cleanedBuffer, { ignoreEncryption: true });
             const copiedPages = await mergedPdf.copyPages(pdf, pdf.getPageIndices());
             copiedPages.forEach(page => mergedPdf.addPage(page));
         }
@@ -96,7 +122,9 @@ app.post('/split', upload.single('file'), async (req, res) => {
 
         const mode = req.body.mode || 'individual';
         const rangesStr = req.body.ranges || '';
-        const srcPdf = await PDFDocument.load(file.buffer, { ignoreEncryption: true });
+
+        const cleanedBuffer = await cleanPdfBuffer(file.buffer);
+        const srcPdf = await PDFDocument.load(cleanedBuffer, { ignoreEncryption: true });
         const totalPages = srcPdf.getPageCount();
 
         let pagesToExtract = [];
@@ -154,7 +182,8 @@ app.post('/reorder', upload.single('file'), async (req, res) => {
         }
 
         const pageOrderStr = req.body.order || '';
-        const srcPdf = await PDFDocument.load(file.buffer, { ignoreEncryption: true });
+        const cleanedBuffer = await cleanPdfBuffer(file.buffer);
+        const srcPdf = await PDFDocument.load(cleanedBuffer, { ignoreEncryption: true });
         const totalPages = srcPdf.getPageCount();
 
         const pageIndices = pageOrderStr
@@ -247,7 +276,8 @@ app.post('/delete', upload.any(), async (req, res) => {
             return res.status(400).send('No se han especificado páginas válidas para eliminar.');
         }
 
-        const srcPdf = await PDFDocument.load(file.buffer, { ignoreEncryption: true });
+        const cleanedBuffer = await cleanPdfBuffer(file.buffer);
+        const srcPdf = await PDFDocument.load(cleanedBuffer, { ignoreEncryption: true });
         const totalPages = srcPdf.getPageCount();
 
         const keepIndices = [];
