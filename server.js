@@ -37,7 +37,7 @@ async function cleanPdfBuffer(inputBuffer) {
   });
 }
 
-// Helper universal para parsear listas de páginas (acepta string, array, JSON)
+// Helper universal robusto para parsear listas de páginas
 function parsePageList(input) {
   if (!input) return [];
   if (Array.isArray(input)) return input.map(n => parseInt(n, 10)).filter(n => !isNaN(n));
@@ -52,7 +52,7 @@ function parsePageList(input) {
 }
 
 // ------------------------------------------------------------
-// 1. UNIR PDF (/merge) - Ya funciona OK
+// 1. UNIR PDF (/merge) - Funciona OK
 // ------------------------------------------------------------
 app.post('/merge', upload.any(), async (req, res) => {
   try {
@@ -80,7 +80,7 @@ app.post('/merge', upload.any(), async (req, res) => {
 });
 
 // ------------------------------------------------------------
-// 2. DIVIDIR PDF (/split) - Corregido para páginas individuales seleccionadas
+// 2. DIVIDIR PDF (/split) - Funciona OK
 // ------------------------------------------------------------
 app.post('/split', upload.single('file'), async (req, res) => {
   try {
@@ -96,10 +96,8 @@ app.post('/split', upload.single('file'), async (req, res) => {
     const srcPdf = await PDFDocument.load(cleanedBuffer, { ignoreEncryption: true });
     const totalPages = srcPdf.getPageCount();
 
-    // MODO INDIVIDUAL: Respetar estrictamente las páginas seleccionadas si se especifican
     if (mode === 'individual') {
       let selectedPages = parsePageList(rangesStr);
-      // Si el usuario no marcó ninguna explícitamente, por defecto usa todas
       if (selectedPages.length === 0) {
         selectedPages = Array.from({ length: totalPages }, (_, i) => i + 1);
       }
@@ -122,7 +120,6 @@ app.post('/split', upload.single('file'), async (req, res) => {
       return res.send(zipBuffer);
     }
 
-    // MODO RANGOS (Funciona OK)
     const rangeGroups = [];
     if (rangesStr && rangesStr.trim() !== '') {
       const parts = rangesStr.split(',');
@@ -182,16 +179,19 @@ app.post('/split', upload.single('file'), async (req, res) => {
 });
 
 // ------------------------------------------------------------
-// 3. ELIMINAR PÁGINAS (/delete) - Ya funciona OK
+// 3. ELIMINAR PÁGINAS (/delete) - Corregido para leer req.body.pages / req.body.remove
 // ------------------------------------------------------------
-app.post('/delete', upload.single('file'), async (req, res) => {
+app.post('/delete', upload.any(), async (req, res) => {
   try {
-    if (!req.file) return res.status(400).send('No se ha subido ningún archivo.');
+    const file = req.file || (req.files && req.files[0]);
+    if (!file) return res.status(400).send('No se ha subido ningún archivo.');
 
-    const pagesToDeleteRaw = parsePageList(req.body.pages);
+    // Capturar cualquier variante posible de nombre de campo enviada por el front (pages, remove, deleted)
+    const rawInput = req.body.pages || req.body.remove || req.body.deletedPages;
+    const pagesToDeleteRaw = parsePageList(rawInput);
     const pagesToDelete = pagesToDeleteRaw.map(n => n - 1);
 
-    const cleanedBuffer = await cleanPdfBuffer(req.file.buffer);
+    const cleanedBuffer = await cleanPdfBuffer(file.buffer);
     const srcPdf = await PDFDocument.load(cleanedBuffer, { ignoreEncryption: true });
     const totalPages = srcPdf.getPageCount();
 
@@ -219,16 +219,17 @@ app.post('/delete', upload.single('file'), async (req, res) => {
 });
 
 // ------------------------------------------------------------
-// 4. EXTRAER PÁGINAS (/extract) - Ya funciona OK
+// 4. EXTRAER PÁGINAS (/extract) - Funciona OK
 // ------------------------------------------------------------
-app.post('/extract', upload.single('file'), async (req, res) => {
+app.post('/extract', upload.any(), async (req, res) => {
   try {
-    if (!req.file) return res.status(400).send('No se ha subido ningún archivo.');
+    const file = req.file || (req.files && req.files[0]);
+    if (!file) return res.status(400).send('No se ha subido ningún archivo.');
 
-    const pagesToExtractRaw = parsePageList(req.body.pages);
+    const pagesToExtractRaw = parsePageList(req.body.pages || req.body.extract);
     const pagesToExtract = pagesToExtractRaw.map(n => n - 1);
 
-    const cleanedBuffer = await cleanPdfBuffer(req.file.buffer);
+    const cleanedBuffer = await cleanPdfBuffer(file.buffer);
     const srcPdf = await PDFDocument.load(cleanedBuffer, { ignoreEncryption: true });
     const totalPages = srcPdf.getPageCount();
 
@@ -252,16 +253,17 @@ app.post('/extract', upload.single('file'), async (req, res) => {
 });
 
 // ------------------------------------------------------------
-// 5. ORDENAR PÁGINAS (/reorder) - Ya funciona OK
+// 5. ORDENAR PÁGINAS (/reorder) - Funciona OK
 // ------------------------------------------------------------
-app.post('/reorder', upload.single('file'), async (req, res) => {
+app.post('/reorder', upload.any(), async (req, res) => {
   try {
-    if (!req.file) return res.status(400).send('No se ha subido ningún archivo.');
+    const file = req.file || (req.files && req.files[0]);
+    if (!file) return res.status(400).send('No se ha subido ningún archivo.');
 
     const orderRaw = parsePageList(req.body.order || req.body.pages);
     const orderIndices = orderRaw.map(n => n - 1);
 
-    const cleanedBuffer = await cleanPdfBuffer(req.file.buffer);
+    const cleanedBuffer = await cleanPdfBuffer(file.buffer);
     const srcPdf = await PDFDocument.load(cleanedBuffer, { ignoreEncryption: true });
     const totalPages = srcPdf.getPageCount();
 
@@ -285,12 +287,14 @@ app.post('/reorder', upload.single('file'), async (req, res) => {
 });
 
 // ------------------------------------------------------------
-// 6. COMPRIMIR PDF (/compress) - Corregido con upload.any()
+// 6. COMPRIMIR PDF (/compress) - Corregido con upload.any() para capturar cualquier campo de archivo
 // ------------------------------------------------------------
 app.post('/compress', upload.any(), async (req, res) => {
   try {
     const file = req.file || (req.files && req.files[0]);
-    if (!file) return res.status(400).send('No se ha subido ningún archivo.');
+    if (!file) {
+      return res.status(400).send('No se ha subido ningún archivo.');
+    }
 
     const cleanedBuffer = await cleanPdfBuffer(file.buffer);
     const srcPdf = await PDFDocument.load(cleanedBuffer, { ignoreEncryption: true });
