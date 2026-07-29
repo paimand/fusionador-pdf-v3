@@ -188,21 +188,29 @@ app.post('/split', upload.any(), async (req, res) => {
   }
 });
 
-// ==========================================
+
+// ============================================================
 // 3. ENDPOINT: ELIMINAR PÁGINAS (/delete)
-// ==========================================
-app.post('/delete', upload.single('file'), async (req, res) => {
+// ============================================================
+app.post('/delete', upload.any(), async (req, res) => {
     try {
-        if (!req.file) {
-            return res.status(400).send('No se ha subido ningún archivo.');
+        const file = req.files && req.files.length > 0 ? req.files[0] : req.file;
+        if (!file) {
+            return res.status(400).send('No se ha recibido ningún archivo PDF.');
         }
 
-        const pagesToDelete = (req.body.pages || '')
+        const rawPages = req.body.pagesToDelete || req.body.pages || '';
+        const pagesToDelete = rawPages
+            .toString()
             .split(',')
             .map(n => parseInt(n.trim(), 10))
-            .filter(n => !isNaN(n));
+            .filter(n => !isNaN(n) && n > 0);
 
-        const srcPdf = await PDFDocument.load(req.file.buffer);
+        if (pagesToDelete.length === 0) {
+            return res.status(400).send('No se han especificado páginas válidas para eliminar.');
+        }
+
+        const srcPdf = await PDFDocument.load(file.buffer, { ignoreEncryption: true });
         const totalPages = srcPdf.getPageCount();
 
         const keepIndices = [];
@@ -213,7 +221,7 @@ app.post('/delete', upload.single('file'), async (req, res) => {
         }
 
         if (keepIndices.length === 0) {
-            return res.status(400).send('No se pueden eliminar todas las páginas del documento.');
+            return res.status(400).send('No puedes eliminar todas las páginas del documento.');
         }
 
         const newPdf = await PDFDocument.create();
@@ -223,11 +231,12 @@ app.post('/delete', upload.single('file'), async (req, res) => {
         const pdfBytes = await newPdf.save();
 
         res.setHeader('Content-Type', 'application/pdf');
-        res.setHeader('Content-Disposition', 'attachment; filename="documento_modificado.pdf"');
-        res.send(Buffer.from(pdfBytes));
+        res.setHeader('Content-Disposition', 'attachment; filename="pdf_modificado.pdf"');
+        return res.send(Buffer.from(pdfBytes));
+
     } catch (error) {
         console.error('Error en /delete:', error);
-        res.status(500).send('Error eliminando páginas del PDF: ' + error.message);
+        return res.status(500).send('Error interno al eliminar las páginas: ' + error.message);
     }
 });
 
