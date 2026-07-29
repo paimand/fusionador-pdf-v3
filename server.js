@@ -14,10 +14,11 @@ app.use(express.urlencoded({ extended: true }));
 // Servir archivos estáticos (HTML, CSS, JS) desde la raíz del proyecto
 app.use(express.static(path.join(__dirname)));
 
+
 // ==========================================
 // 1. ENDPOINT: UNIR PDFs (/merge)
 // ==========================================
-app.post('/merge', upload.array('files'), async (req, res) => {
+app.post('/merge', upload.any(), async (req, res) => {
     try {
         if (!req.files || req.files.length < 2) {
             return res.status(400).send('Se requieren al menos dos archivos PDF para unir.');
