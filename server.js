@@ -8,7 +8,7 @@ const Archiver = require('archiver');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// Configuración de Multer en memoria (sin escribir en disco para ser más rápido)
+// Configuración de Multer en memoria (procesamiento rápido sin guardar en disco)
 const upload = multer({ storage: multer.memoryStorage() });
 
 // Garantizar la existencia de la carpeta temporal 'uploads'
@@ -43,10 +43,13 @@ app.get('/compress.html', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'compress.html'));
 });
 
+app.get('/delete.html', (req, res) => {
+    res.sendFile(path.join(__dirname, 'public', 'delete.html'));
+});
+
 // ============================================================
 // 1. ENDPOINT: UNIR PDFs (/merge)
 // ============================================================
-// upload.any() acepta cualquier campo de archivo ('pdfFiles', 'files', etc.)
 app.post('/merge', upload.any(), async (req, res) => {
     try {
         if (!req.files || req.files.length < 2) {
@@ -201,6 +204,57 @@ app.post('/compress', async (req, res) => {
     } catch (error) {
         console.error('Error procesando compresión rápida:', error);
         return res.status(500).send('Error interno reconstruyendo el PDF comprimido.');
+    }
+});
+
+// ============================================================
+// 4. ENDPOINT: ELIMINAR PÁGINAS (/delete-pages)
+// ============================================================
+app.post('/delete-pages', upload.any(), async (req, res) => {
+    try {
+        const file = req.files && req.files.length > 0 ? req.files[0] : req.file;
+        if (!file) {
+            return res.status(400).send('No se ha recibido ningún archivo PDF.');
+        }
+
+        const rawPages = req.body.pages || '';
+        const pagesToDelete = rawPages
+            .toString()
+            .split(',')
+            .map(n => parseInt(n.trim(), 10))
+            .filter(n => !isNaN(n) && n > 0);
+
+        if (pagesToDelete.length === 0) {
+            return res.status(400).send('No se han especificado páginas válidas para eliminar.');
+        }
+
+        const srcPdf = await PDFDocument.load(file.buffer, { ignoreEncryption: true });
+        const totalPages = srcPdf.getPageCount();
+
+        const keepIndices = [];
+        for (let i = 1; i <= totalPages; i++) {
+            if (!pagesToDelete.includes(i)) {
+                keepIndices.push(i - 1);
+            }
+        }
+
+        if (keepIndices.length === 0) {
+            return res.status(400).send('No puedes eliminar todas las páginas del documento.');
+        }
+
+        const newPdf = await PDFDocument.create();
+        const copiedPages = await newPdf.copyPages(srcPdf, keepIndices);
+        copiedPages.forEach(page => newPdf.addPage(page));
+
+        const pdfBytes = await newPdf.save();
+
+        res.setHeader('Content-Type', 'application/pdf');
+        res.setHeader('Content-Disposition', 'attachment; filename="pdf_modificado.pdf"');
+        return res.send(Buffer.from(pdfBytes));
+
+    } catch (error) {
+        console.error('Error en /delete-pages:', error);
+        return res.status(500).send('Error interno al eliminar las páginas: ' + error.message);
     }
 });
 
