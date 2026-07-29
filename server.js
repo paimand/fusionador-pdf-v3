@@ -60,7 +60,6 @@ app.get('/compress.html', (req, res) => res.sendFile(path.join(__dirname, 'publi
 // ============================================================
 // ENDPOINT: UNIR PDFs (/merge)
 // ============================================================
-// Usamos upload.any() para aceptar archivos con cualquier nombre de campo
 app.post('/merge', upload.any(), async (req, res) => {
     try {
         if (!req.files || req.files.length === 0) {
@@ -98,7 +97,8 @@ app.post('/split', upload.any(), async (req, res) => {
             return res.status(400).send('No se ha subido ningún archivo PDF.');
         }
 
-        const mode = req.body.mode; // 'all' o 'ranges'
+        // Detectar el modo ya sea desde req.body.mode o parámetros por defecto
+        const mode = req.body.mode || (req.body.ranges ? 'ranges' : 'all');
         const cleanedBuffer = await cleanPdfBuffer(file.buffer);
         const srcPdf = await PDFDocument.load(cleanedBuffer, { ignoreEncryption: true });
         const totalPages = srcPdf.getPageCount();
@@ -119,21 +119,29 @@ app.post('/split', upload.any(), async (req, res) => {
 
             await archive.finalize();
 
-        } else if (mode === 'ranges') {
-            const rangesStr = req.body.ranges;
+        } else if (mode === 'ranges' || mode === 'extract' || mode === 'custom') {
+            const rangesStr = req.body.ranges || req.body.pages;
             if (!rangesStr) {
                 return res.status(400).send('No se especificaron los rangos o índices de páginas.');
             }
 
             const indicesToExtract = [];
-            const parts = rangesStr.split(',');
+            let parts = [];
+            
+            if (Array.isArray(rangesStr)) {
+                parts = rangesStr;
+            } else if (typeof rangesStr === 'string') {
+                parts = rangesStr.split(',');
+            }
 
             for (const part of parts) {
-                const trimmed = part.trim();
+                const trimmed = String(part).trim();
                 if (trimmed.includes('-')) {
                     const [start, end] = trimmed.split('-').map(n => parseInt(n.trim(), 10));
                     if (!isNaN(start) && !isNaN(end)) {
-                        for (let i = Math.min(start, end); i <= Math.max(start, end); i++) {
+                        const min = Math.min(start, end);
+                        const max = Math.max(start, end);
+                        for (let i = min; i <= max; i++) {
                             if (i >= 1 && i <= totalPages) {
                                 indicesToExtract.push(i - 1);
                             }
@@ -182,11 +190,22 @@ app.post('/delete', upload.any(), async (req, res) => {
         }
 
         let pagesToDelete = [];
-        if (req.body.pages) {
-            try {
-                pagesToDelete = JSON.parse(req.body.pages);
-            } catch (_) {
-                pagesToDelete = req.body.pages.split(',').map(p => parseInt(p.trim(), 10)).filter(p => !isNaN(p));
+        const rawPages = req.body.pages || req.body.pagesToDelete;
+
+        if (rawPages) {
+            if (Array.isArray(rawPages)) {
+                pagesToDelete = rawPages.map(p => parseInt(p, 10)).filter(p => !isNaN(p));
+            } else if (typeof rawPages === 'string') {
+                try {
+                    const parsed = JSON.parse(rawPages);
+                    if (Array.isArray(parsed)) {
+                        pagesToDelete = parsed.map(p => parseInt(p, 10)).filter(p => !isNaN(p));
+                    } else {
+                        pagesToDelete = rawPages.split(',').map(p => parseInt(p.trim(), 10)).filter(p => !isNaN(p));
+                    }
+                } catch (_) {
+                    pagesToDelete = rawPages.split(',').map(p => parseInt(p.trim(), 10)).filter(p => !isNaN(p));
+                }
             }
         }
 
