@@ -98,13 +98,14 @@ app.post('/split', upload.single('file'), async (req, res) => {
 
         const mode = req.body.mode || 'individual';
         const rangesStr = req.body.ranges || '';
+        const mergeRanges = req.body.mergeRanges === 'true' || req.body.mergeRanges === true;
 
         const cleanedBuffer = await cleanPdfBuffer(file.buffer);
         const srcPdf = await PDFDocument.load(cleanedBuffer, { ignoreEncryption: true });
         const totalPages = srcPdf.getPageCount();
 
         // ------------------------------------------------------------
-        // MODO 1: DIVIDIR EN PÁGINAS INDIVIDUALES (GENERA UN ARCHIVO ZIP)
+        // MODO 1: DIVIDIR EN PÁGINAS INDIVIDUALES (ZIP)
         // ------------------------------------------------------------
         if (mode === 'individual' || mode === 'pages') {
             res.setHeader('Content-Type', 'application/zip');
@@ -127,39 +128,67 @@ app.post('/split', upload.single('file'), async (req, res) => {
         }
 
         // ------------------------------------------------------------
-        // MODO 2: EXTRAER POR RANGOS O SELECCIÓN (GENERA UN ÚNICO PDF)
+        // MODO 2: DIVIDIR POR RANGOS
         // ------------------------------------------------------------
-        let pagesToExtract = [];
-        const groups = rangesStr.split(',').map(s => s.trim()).filter(Boolean);
+        const rawGroups = rangesStr.split(',').map(s => s.trim()).filter(Boolean);
+        const rangeList = []; // Array de arrays de índices base-0
 
-        for (const group of groups) {
+        for (const group of rawGroups) {
+            const indices = [];
             if (group.includes('-')) {
                 const [start, end] = group.split('-').map(n => parseInt(n.trim(), 10));
                 const pStart = isNaN(start) ? 1 : Math.max(1, start);
                 const pEnd = isNaN(end) ? totalPages : Math.min(totalPages, end);
-                for (let p = pStart; p <= pEnd; p++) pagesToExtract.push(p);
+                for (let p = pStart; p <= pEnd; p++) indices.push(p - 1);
             } else {
                 const p = parseInt(group, 10);
-                if (!isNaN(p) && p >= 1 && p <= totalPages) pagesToExtract.push(p);
+                if (!isNaN(p) && p >= 1 && p <= totalPages) indices.push(p - 1);
+            }
+            if (indices.length > 0) {
+                rangeList.push({ name: group, indices });
             }
         }
 
-        pagesToExtract = [...new Set(pagesToExtract)].sort((a, b) => a - b);
-
-        if (pagesToExtract.length === 0) {
-            return res.status(400).send('No se han especificado páginas válidas.');
+        if (rangeList.length === 0) {
+            return res.status(400).send('No se han especificado rangos válidos.');
         }
 
-        const newPdf = await PDFDocument.create();
-        const pageIndices = pagesToExtract.map(p => p - 1);
-        const copiedPages = await newPdf.copyPages(srcPdf, pageIndices);
-        copiedPages.forEach(p => newPdf.addPage(p));
+        // OPCIÓN A: UNIR TODOS LOS RANGOS EN UN ÚNICO PDF
+        if (mergeRanges) {
+            const newPdf = await PDFDocument.create();
+            
+            for (const item of rangeList) {
+                const copiedPages = await newPdf.copyPages(srcPdf, item.indices);
+                copiedPages.forEach(p => newPdf.addPage(p));
+            }
 
-        const pdfBytes = await newPdf.save();
+            const pdfBytes = await newPdf.save();
 
-        res.setHeader('Content-Type', 'application/pdf');
-        res.setHeader('Content-Disposition', 'attachment; filename="documento_extraido.pdf"');
-        return res.send(Buffer.from(pdfBytes));
+            res.setHeader('Content-Type', 'application/pdf');
+            res.setHeader('Content-Disposition', 'attachment; filename="rangos_unidos.pdf"');
+            return res.send(Buffer.from(pdfBytes));
+        }
+
+        // OPCIÓN B: CADA RANGO EN UN PDF INDEPENDIENTE (ZIP)
+        res.setHeader('Content-Type', 'application/zip');
+        res.setHeader('Content-Disposition', 'attachment; filename="rangos_divididos.zip"');
+
+        const archive = Archiver('zip', { zlib: { level: 9 } });
+        archive.pipe(res);
+
+        for (let idx = 0; idx < rangeList.length; idx++) {
+            const item = rangeList[idx];
+            const rangeDoc = await PDFDocument.create();
+            const copiedPages = await rangeDoc.copyPages(srcPdf, item.indices);
+            copiedPages.forEach(p => rangeDoc.addPage(p));
+            
+            const pdfBytes = await rangeDoc.save();
+            const fileName = `rango_${item.name.replace(/\s+/g, '_')}.pdf`;
+            archive.append(Buffer.from(pdfBytes), { name: fileName });
+        }
+
+        await archive.finalize();
+        return;
 
     } catch (error) {
         console.error('Error en /split:', error);
