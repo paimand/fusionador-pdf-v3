@@ -8,7 +8,7 @@ const Archiver = require('archiver');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// Configuración de Multer en memoria (procesamiento rápido sin guardar en disco)
+// Configuración de Multer en memoria
 const upload = multer({ storage: multer.memoryStorage() });
 
 // Garantizar la existencia de la carpeta temporal 'uploads'
@@ -17,11 +17,11 @@ if (!fs.existsSync(uploadDir)) {
     fs.mkdirSync(uploadDir, { recursive: true });
 }
 
-// Middlewares estándar con límite ampliado para JSON / base64
+// Middlewares para JSON y formularios
 app.use(express.json({ limit: '100mb' }));
 app.use(express.urlencoded({ extended: true, limit: '100mb' }));
 
-// Servir archivos estáticos desde la carpeta public (CSS, JS, imágenes)
+// Servir archivos estáticos desde la carpeta public (CSS, JS, etc.)
 app.use(express.static(path.join(__dirname, 'public')));
 
 // ============================================================
@@ -167,7 +167,7 @@ app.post('/split', upload.single('file'), async (req, res) => {
 });
 
 // ============================================================
-// 3. ENDPOINT: COMPRESIÓN ULTRARRÁPIDA (RECONSTRUCCIÓN PÁGINAS)
+// 3. ENDPOINT: COMPRESIÓN ULTRARRÁPIDA (/compress)
 // ============================================================
 app.post('/compress', async (req, res) => {
     try {
@@ -208,16 +208,17 @@ app.post('/compress', async (req, res) => {
 });
 
 // ============================================================
-// 4. ENDPOINT: ELIMINAR PÁGINAS (/delete-pages)
+// 4. ENDPOINT: ELIMINAR PÁGINAS (/delete)
 // ============================================================
-app.post('/delete-pages', upload.any(), async (req, res) => {
+app.post('/delete', upload.any(), async (req, res) => {
     try {
         const file = req.files && req.files.length > 0 ? req.files[0] : req.file;
         if (!file) {
             return res.status(400).send('No se ha recibido ningún archivo PDF.');
         }
 
-        const rawPages = req.body.pages || '';
+        // Lee el parámetro exacto 'pagesToDelete' enviado por tu delete.js
+        const rawPages = req.body.pagesToDelete || req.body.pages || '';
         const pagesToDelete = rawPages
             .toString()
             .split(',')
@@ -253,7 +254,7 @@ app.post('/delete-pages', upload.any(), async (req, res) => {
         return res.send(Buffer.from(pdfBytes));
 
     } catch (error) {
-        console.error('Error en /delete-pages:', error);
+        console.error('Error en /delete:', error);
         return res.status(500).send('Error interno al eliminar las páginas: ' + error.message);
     }
 });
