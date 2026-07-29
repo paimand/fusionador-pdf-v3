@@ -304,28 +304,45 @@ app.post('/reorder', upload.any(), async (req, res) => {
   }
 });
 
-// ------------------------------------------------------------
-// 6. COMPRIMIR PDF (/compress) - Corregido y blindado con upload.any()
-// ------------------------------------------------------------
-app.post('/compress', upload.any(), async (req, res) => {
-  try {
-    const file = req.file || (req.files && req.files[0]);
-    if (!file) {
-      return res.status(400).send('No se ha subido ningún archivo.');
+// ============================================================
+// 6. ENDPOINT: COMPRESIÓN ULTRARRÁPIDA (/compress)
+// ============================================================
+app.post('/compress', async (req, res) => {
+    try {
+        const { images, level } = req.body;
+
+        if (!images || !Array.isArray(images) || images.length === 0) {
+            return res.status(400).send('No se han recibido páginas para procesar.');
+        }
+
+        const pdfDoc = await PDFDocument.create();
+
+        for (const dataUrl of images) {
+            const base64Data = dataUrl.replace(/^data:image\/jpeg;base64,/, '');
+            const imageBuffer = Buffer.from(base64Data, 'base64');
+
+            const embeddedImage = await pdfDoc.embedJpg(imageBuffer);
+            const { width, height } = embeddedImage;
+
+            const page = pdfDoc.addPage([width, height]);
+            page.drawImage(embeddedImage, {
+                x: 0,
+                y: 0,
+                width: width,
+                height: height,
+            });
+        }
+
+        const pdfBytes = await pdfDoc.save();
+
+        res.setHeader('Content-Type', 'application/pdf');
+        res.setHeader('Content-Disposition', `attachment; filename="compressed_${level || 'result'}.pdf"`);
+        return res.send(Buffer.from(pdfBytes));
+
+    } catch (error) {
+        console.error('Error procesando compresión rápida:', error);
+        return res.status(500).send('Error interno reconstruyendo el PDF comprimido.');
     }
-
-    const cleanedBuffer = await cleanPdfBuffer(file.buffer);
-    const srcPdf = await PDFDocument.load(cleanedBuffer, { ignoreEncryption: true });
-
-    const pdfBytes = await srcPdf.save({ useObjectStreams: true });
-
-    res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', 'attachment; filename="documento_comprimido.pdf"');
-    return res.send(Buffer.from(pdfBytes));
-  } catch (err) {
-    console.error('Error en /compress:', err);
-    return res.status(500).send(`Error comprimiendo PDF: ${err.message}`);
-  }
 });
 
 const PORT = process.env.PORT || 3000;
