@@ -5,38 +5,105 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Dividir PDF - Suite PDF</title>
     
-    <!-- Librería externa -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
     
-    <!-- Fuentes y estilos -->
     <link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,400;14..32,500;14..32,600;14..32,700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="/css/common.css">
     <style>
-        .page-card {
-            border: 2px solid #e5e7eb;
-            border-radius: 8px;
-            padding: 8px;
-            background: #fff;
-            cursor: pointer;
-            text-align: center;
-            transition: all 0.2s ease;
-            position: relative;
+        .split-options {
+            display: flex;
+            gap: 16px;
+            margin-bottom: 24px;
         }
-        .page-card.selected {
+        .option-card {
+            flex: 1;
+            border: 2px solid #e2e8f0;
+            border-radius: 12px;
+            padding: 16px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+        .option-card.active {
             border-color: #2563eb;
             background-color: #eff6ff;
         }
-        .page-card canvas {
-            max-width: 100%;
-            height: auto;
-            border-radius: 4px;
-            display: block;
-            margin: 0 auto 6px auto;
-        }
-        .page-card span {
-            font-size: 0.8rem;
+        .option-card h3 {
+            font-size: 1rem;
             font-weight: 600;
-            color: #374151;
+            margin-bottom: 4px;
+        }
+        .option-card p {
+            font-size: 0.85rem;
+            color: #64748b;
+        }
+
+        /* Bloque de rangos */
+        .ranges-container {
+            background: #f8fafc;
+            border: 1px solid #e2e8f0;
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+        .range-item {
+            background: #fff;
+            border: 1px solid #cbd5e1;
+            border-radius: 8px;
+            padding: 12px 16px;
+            margin-bottom: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+        }
+        .range-inputs {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .range-inputs input {
+            width: 70px;
+            padding: 6px 10px;
+            border: 1px solid #cbd5e1;
+            border-radius: 6px;
+            text-align: center;
+            font-weight: 600;
+        }
+        .btn-remove-range {
+            background: none;
+            border: none;
+            color: #ef4444;
+            cursor: pointer;
+            font-size: 1.2rem;
+            padding: 4px 8px;
+        }
+        .btn-add-range {
+            background: #e2e8f0;
+            border: none;
+            color: #1e293b;
+            padding: 8px 16px;
+            border-radius: 6px;
+            font-weight: 600;
+            cursor: pointer;
+            font-size: 0.85rem;
+        }
+        .btn-add-range:hover {
+            background: #cbd5e1;
+        }
+
+        .checkbox-container {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-top: 16px;
+            font-size: 0.9rem;
+            color: #334155;
+            font-weight: 500;
+        }
+        .checkbox-container input[type="checkbox"] {
+            width: 18px;
+            height: 18px;
+            cursor: pointer;
         }
     </style>
 </head>
@@ -47,54 +114,196 @@
     <div class="container">
         <header class="tool-header">
             <h1>Dividir PDF</h1>
-            <p>Divide un PDF en partes seleccionando páginas o rangos.</p>
+            <p>Divide un PDF en múltiples archivos o extrae rangos específicos.</p>
         </header>
 
-        <!-- Área de subida -->
         <div class="upload-area" id="dropZoneSplit">
-            <p>Arrastra o selecciona un PDF para dividir</p>
+            <p>Arrastra o selecciona tu archivo PDF aquí</p>
             <input type="file" id="fileInputSplit" accept=".pdf">
         </div>
 
-        <!-- Opciones de modo -->
-        <div style="margin: 16px 0;">
-            <label>
-                <input type="radio" name="splitMode" value="individual" checked> Dividir en páginas individuales
-            </label>
-            <label style="margin-left: 20px;">
-                <input type="radio" name="splitMode" value="ranges"> Dividir por rangos
-            </label>
-        </div>
+        <div id="splitWorkspace" style="display:none; margin-top:20px;">
+            <p id="selectedFileName" style="font-weight:600; margin-bottom:16px; color:#1e293b;"></p>
 
-        <!-- Vista previa de cuadrícula -->
-        <div id="splitPreview" style="display:none; margin-bottom:16px;">
-            <div class="grid-controls" style="margin-bottom: 12px;">
-                <button id="splitSelectAll" class="btn btn-secondary" style="padding:6px 14px;">Seleccionar todas</button>
-                <button id="splitDeselectAll" class="btn btn-secondary" style="padding:6px 14px;">Deseleccionar todas</button>
+            <div class="split-options">
+                <div class="option-card active" id="modeIndividual" onclick="selectMode('individual')">
+                    <h3>Dividir en páginas individuales</h3>
+                    <p>Cada página se guardará en un PDF separado (.ZIP)</p>
+                </div>
+                <div class="option-card" id="modeRanges" onclick="selectMode('range')">
+                    <h3>Dividir por rangos</h3>
+                    <p>Define rangos personalizados de páginas</p>
+                </div>
             </div>
-            <div id="splitPageGrid" class="page-grid"></div>
-        </div>
 
-        <!-- Entrada de rangos opcional -->
-        <div id="splitRangesContainer" style="display:none; margin-bottom:16px;">
-            <label for="splitRanges">Rangos (ej. 1,3-5,7):</label>
-            <input type="text" id="splitRanges" placeholder="Ej: 1,3-5,7" style="width:100%;padding:8px;border:1px solid #ccc;border-radius:6px;margin-top:6px;">
-        </div>
+            <div id="rangesSection" class="ranges-container" style="display:none;">
+                <div id="rangesList"></div>
 
-        <!-- Acciones -->
-        <div class="actions">
-            <button id="splitBtn" class="btn btn-primary">Dividir</button>
+                <button type="button" class="btn-add-range" onclick="addRangeRow()">+ Añadir rango</button>
+
+                <div class="checkbox-container">
+                    <input type="checkbox" id="mergeRangesCheck" checked>
+                    <label for="mergeRangesCheck">Unir todos los rangos en un único archivo PDF</label>
+                </div>
+            </div>
+
+            <div class="actions">
+                <button id="splitBtn" class="btn btn-primary" style="width:100%;">Dividir PDF</button>
+            </div>
+            
+            <div id="splitStatus" style="margin-top:12px;"></div>
         </div>
-        
-        <div id="splitStatus" style="margin-top:12px;"></div>
-        <div id="loading" style="display:none;">⏳ Procesando...</div>
     </div>
 
     <div id="app-footer"></div>
 
-    <!-- Scripts modularizados -->
     <script src="/js/common.js"></script>
-    <script src="/js/split.js"></script>
+    <script>
+        let selectedFile = null;
+        let pdfTotalPages = 1;
+        let currentMode = 'individual'; // 'individual' o 'range'
 
+        // Inicializar Dropzone
+        setupDropZone('dropZoneSplit', 'fileInputSplit', async files => {
+            if (files && files[0]) {
+                selectedFile = files[0];
+                document.getElementById('selectedFileName').textContent = `📄 Documento: ${selectedFile.name}`;
+                
+                // Obtener total de páginas
+                try {
+                    const buffer = await selectedFile.arrayBuffer();
+                    const pdf = await pdfjsLib.getDocument({ data: buffer }).promise;
+                    pdfTotalPages = pdf.numPages;
+                } catch(e) {
+                    pdfTotalPages = 1;
+                }
+
+                document.getElementById('splitWorkspace').style.display = 'block';
+                document.getElementById('dropZoneSplit').style.display = 'none';
+
+                // Inicializar rangos por defecto
+                resetRanges();
+            }
+        });
+
+        function selectMode(mode) {
+            currentMode = mode;
+            if (mode === 'individual') {
+                document.getElementById('modeIndividual').classList.add('active');
+                document.getElementById('modeRanges').classList.remove('active');
+                document.getElementById('rangesSection').style.display = 'none';
+            } else {
+                document.getElementById('modeRanges').classList.add('active');
+                document.getElementById('modeIndividual').classList.remove('active');
+                document.getElementById('rangesSection').style.display = 'block';
+            }
+        }
+
+        function resetRanges() {
+            const list = document.getElementById('rangesList');
+            list.innerHTML = '';
+            addRangeRow(1, pdfTotalPages);
+        }
+
+        function addRangeRow(from = 1, to = pdfTotalPages) {
+            const list = document.getElementById('rangesList');
+            const rangeId = Date.now() + Math.random().toString(36).substring(7);
+
+            const row = document.createElement('div');
+            row.className = 'range-item';
+            row.id = `range_${rangeId}`;
+            row.innerHTML = `
+                <div class="range-inputs">
+                    <span>Rango ${list.children.length + 1}: Desde página</span>
+                    <input type="number" class="range-from" min="1" max="${pdfTotalPages}" value="${from}">
+                    <span>hasta página</span>
+                    <input type="number" class="range-to" min="1" max="${pdfTotalPages}" value="${to}">
+                </div>
+                <button type="button" class="btn-remove-range" onclick="removeRangeRow('range_${rangeId}')">✕</button>
+            `;
+            list.appendChild(row);
+            updateRangeTitles();
+        }
+
+        function removeRangeRow(id) {
+            const row = document.getElementById(id);
+            if (row) row.remove();
+            updateRangeTitles();
+        }
+
+        function updateRangeTitles() {
+            const items = document.querySelectorAll('.range-item');
+            items.forEach((item, index) => {
+                const labelSpan = item.querySelector('.range-inputs span');
+                if (labelSpan) labelSpan.textContent = `Rango ${index + 1}: Desde página`;
+            });
+        }
+
+        // PROCESAR DIVISIÓN
+        document.getElementById('splitBtn').addEventListener('click', async () => {
+            if (!selectedFile) return;
+
+            const splitBtn = document.getElementById('splitBtn');
+            splitBtn.disabled = true;
+            if (typeof showLoading === 'function') showLoading(true);
+
+            try {
+                const formData = new FormData();
+                formData.append('file', selectedFile);
+                formData.append('mode', currentMode);
+
+                if (currentMode === 'range') {
+                    const items = document.querySelectorAll('.range-item');
+                    const rangesArray = [];
+
+                    items.forEach(item => {
+                        const from = item.querySelector('.range-from').value;
+                        const to = item.querySelector('.range-to').value;
+                        if (from && to) {
+                            rangesArray.push(`${from}-${to}`);
+                        }
+                    });
+
+                    if (rangesArray.length === 0) {
+                        throw new Error('Debes definir al menos un rango de páginas.');
+                    }
+
+                    formData.append('ranges', rangesArray.join(','));
+                    formData.append('mergeRanges', document.getElementById('mergeRangesCheck').checked);
+                }
+
+                const resp = await fetch('/split', { method: 'POST', body: formData });
+                if (!resp.ok) {
+                    const errText = await resp.text();
+                    throw new Error(errText);
+                }
+
+                const contentType = resp.headers.get('content-type') || '';
+                const isZip = contentType.includes('application/zip');
+                const defaultFilename = isZip ? 'rangos_divididos.zip' : 'rangos_unidos.pdf';
+
+                const blob = await resp.blob();
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = defaultFilename;
+                document.body.appendChild(a);
+                a.click();
+                a.remove();
+                window.URL.revokeObjectURL(url);
+                
+                if (typeof showStatus === 'function') showStatus('splitStatus', '✅ Operación completada con éxito');
+            } catch (err) {
+                if (typeof showStatus === 'function') {
+                    showStatus('splitStatus', '❌ ' + err.message, true);
+                } else {
+                    alert('Error: ' + err.message);
+                }
+            } finally {
+                splitBtn.disabled = false;
+                if (typeof showLoading === 'function') showLoading(false);
+            }
+        });
+    </script>
 </body>
 </html>
