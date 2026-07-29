@@ -246,38 +246,45 @@
 
     <script src="/js/common.js"></script>
     <script>
-        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+        if (typeof pdfjsLib !== 'undefined') {
+            pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+        }
 
         let selectedFile = null;
         let pdfDocInstance = null;
         let pdfTotalPages = 1;
         let currentMode = 'individual'; 
-        let selectedPagesSet = new Set(); // Para modo individual
+        let selectedPagesSet = new Set();
 
-        // Inicializar DropZone
+        // Configuración de zona de carga de archivos
         setupDropZone('dropZoneSplit', 'fileInputSplit', async files => {
-            if (files && files[0]) {
-                selectedFile = files[0];
-                document.getElementById('selectedFileName').textContent = `📄 Documento: ${selectedFile.name}`;
-                
-                try {
-                    const buffer = await selectedFile.arrayBuffer();
-                    pdfDocInstance = await pdfjsLib.getDocument({ data: buffer }).promise;
-                    pdfTotalPages = pdfDocInstance.numPages;
-                    
-                    // Seleccionar todas por defecto en modo individual
-                    selectedPagesSet.clear();
-                    for (let i = 1; i <= pdfTotalPages; i++) selectedPagesSet.add(i);
+            if (!files || files.length === 0) return;
+            
+            selectedFile = files[0];
+            document.getElementById('selectedFileName').textContent = `📄 Documento: ${selectedFile.name}`;
+            
+            try {
+                if (typeof showLoading === 'function') showLoading(true);
 
-                    document.getElementById('splitWorkspace').style.display = 'block';
-                    document.getElementById('dropZoneSplit').style.display = 'none';
+                const arrayBuffer = await selectedFile.arrayBuffer();
+                const typedarray = new Uint8Array(arrayBuffer);
 
-                    // Cargar Vistas
-                    renderIndividualGrid();
-                    resetRanges();
-                } catch(e) {
-                    alert('Error leyendo el archivo PDF: ' + e.message);
-                }
+                pdfDocInstance = await pdfjsLib.getDocument({ data: typedarray }).promise;
+                pdfTotalPages = pdfDocInstance.numPages;
+
+                selectedPagesSet.clear();
+                for (let i = 1; i <= pdfTotalPages; i++) selectedPagesSet.add(i);
+
+                document.getElementById('splitWorkspace').style.display = 'block';
+                document.getElementById('dropZoneSplit').style.display = 'none';
+
+                await renderIndividualGrid();
+                resetRanges();
+            } catch(e) {
+                console.error("Error al cargar PDF:", e);
+                alert('Error leyendo el archivo PDF: ' + e.message);
+            } finally {
+                if (typeof showLoading === 'function') showLoading(false);
             }
         });
 
@@ -416,7 +423,6 @@
             }
         }
 
-        // Helper para renderizar miniaturas con PDF.js
         async function renderPageMiniature(pageNum, canvas, scale) {
             if (!pdfDocInstance) return;
             try {
@@ -453,4 +459,58 @@
                     }
                     formData.append('ranges', sortedPages.join(','));
                 } else {
-                    formData.append('mode', '
+                    formData.append('mode', 'range');
+                    const items = document.querySelectorAll('.range-item');
+                    const rangesArray = [];
+
+                    items.forEach(item => {
+                        const from = item.querySelector('.range-from').value;
+                        const to = item.querySelector('.range-to').value;
+                        if (from && to) {
+                            rangesArray.push(`${from}-${to}`);
+                        }
+                    });
+
+                    if (rangesArray.length === 0) {
+                        throw new Error('Debes definir al menos un rango de páginas.');
+                    }
+
+                    formData.append('ranges', rangesArray.join(','));
+                    formData.append('mergeRanges', document.getElementById('mergeRangesCheck').checked);
+                }
+
+                const resp = await fetch('/split', { method: 'POST', body: formData });
+                if (!resp.ok) {
+                    const errText = await resp.text();
+                    throw new Error(errText);
+                }
+
+                const contentType = resp.headers.get('content-type') || '';
+                const isZip = contentType.includes('application/zip');
+                const defaultFilename = isZip ? 'paginas_divididas.zip' : 'documento_dividido.pdf';
+
+                const blob = await resp.blob();
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = defaultFilename;
+                document.body.appendChild(a);
+                a.click();
+                a.remove();
+                window.URL.revokeObjectURL(url);
+                
+                if (typeof showStatus === 'function') showStatus('splitStatus', '✅ Operación completada con éxito');
+            } catch (err) {
+                if (typeof showStatus === 'function') {
+                    showStatus('splitStatus', '❌ ' + err.message, true);
+                } else {
+                    alert('Error: ' + err.message);
+                }
+            } finally {
+                splitBtn.disabled = false;
+                if (typeof showLoading === 'function') showLoading(false);
+            }
+        });
+    </script>
+</body>
+</html>
