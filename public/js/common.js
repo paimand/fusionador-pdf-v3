@@ -41,32 +41,25 @@ function injectHeader() {
                             <span class="dropdown-arrow">▼</span>
                         </button>
                         <div class="dropdown-menu" id="toolsDropdownMenu">
-                            <a href="/merge.html" class="dropdown-item">
-                                <span class="icon">🧩</span>
-                                <div class="item-text">
-                                    <strong>Unir PDF</strong>
-                                    <small>Combina múltiples archivos en uno solo</small>
-                                </div>
-                            </a>
-                            <a href="/split.html" class="dropdown-item">
-                                <span class="icon">✂️</span>
-                                <div class="item-text">
-                                    <strong>Dividir PDF</strong>
-                                    <small>Separa páginas o extrae rangos</small>
-                                </div>
-                            </a>
-                            <a href="/compress.html" class="dropdown-item">
-                                <span class="icon">🗜️</span>
-                                <div class="item-text">
-                                    <strong>Comprimir PDF</strong>
-                                    <small>Reduce el peso de tus archivos</small>
-                                </div>
-                            </a>
-                            <a href="/delete.html" class="dropdown-item">
+                            <a href="/delete.html" class="dropdown-item ${currentPath.includes('delete') ? 'active' : ''}">
                                 <span class="icon">🗑️</span>
                                 <div class="item-text">
                                     <strong>Eliminar páginas</strong>
-                                    <small>Quita páginas innecesarias de tu PDF</small>
+                                    <small>Quita las páginas innecesarias del PDF</small>
+                                </div>
+                            </a>
+                            <a href="/split.html" class="dropdown-item ${currentPath.includes('split') ? 'active' : ''}">
+                                <span class="icon">✂️</span>
+                                <div class="item-text">
+                                    <strong>Extraer páginas</strong>
+                                    <small>Separa páginas o selecciona rangos</small>
+                                </div>
+                            </a>
+                            <a href="/reorder.html" class="dropdown-item ${currentPath.includes('reorder') ? 'active' : ''}">
+                                <span class="icon">🔄</span>
+                                <div class="item-text">
+                                    <strong>Ordenar páginas</strong>
+                                    <small>Reorganiza el orden de las páginas</small>
                                 </div>
                             </a>
                         </div>
@@ -76,7 +69,7 @@ function injectHeader() {
         </header>
     `;
 
-    // Soporte para apertura por clic (móviles/táctil) y cierre exterior
+    // Soporte para apertura por clic (móviles/pantallas táctiles) y cierre al hacer clic fuera
     const dropdownBtn = document.getElementById('toolsDropdownBtn');
     const dropdownMenu = document.getElementById('toolsDropdownMenu');
 
